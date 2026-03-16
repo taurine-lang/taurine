@@ -1,0 +1,141 @@
+// std/string.tau — Полная библиотека строк
+
+function len(s) {
+    return #s
+}
+
+function upper(s) {
+    return io_strupper(s)
+}
+
+function lower(s) {
+    return io_strlower(s)
+}
+
+function trim(s) {
+    return io_strtrim(s)
+}
+
+function trimLeft(s) {
+    return io_strtrimleft(s)
+}
+
+function trimRight(s) {
+    return io_strtrimright(s)
+}
+
+function padLeft(s, length, char) {
+    loc result = s
+    while #result < length {
+        result = char + result
+    }
+    return result
+}
+
+function padRight(s, length, char) {
+    loc result = s
+    while #result < length {
+        result = result + char
+    }
+    return result
+}
+
+function repeat(s, count) {
+    loc result = ""
+    loc i = 0
+    while i < count {
+        result = result + s
+        i = i + 1
+    }
+    return result
+}
+
+function substr(s, start, length) {
+    return io_strsubstr(s, start, length)
+}
+
+function slice(s, start, end) {
+    return io_strsubstr(s, start, end - start)
+}
+
+function charAt(s, index) {
+    return io_strsubstr(s, index, 1)
+}
+
+function split(s, delimiter) {
+    return io_strsplit(s, delimiter)
+}
+
+function join(arr, delimiter) {
+    loc result = ""
+    loc i = 0
+    while i < #arr {
+        if i > 0 { result = result + delimiter }
+        result = result + tostring(arr[i])
+        i = i + 1
+    }
+    return result
+}
+
+function find(s, pattern) {
+    return io_strfind(s, pattern)
+}
+
+function contains(s, pattern) {
+    return io_strfind(s, pattern) >= 0
+}
+
+function startsWith(s, prefix) {
+    return io_strfind(s, prefix) == 0
+}
+
+function endsWith(s, suffix) {
+    loc pos = io_strfind(s, suffix)
+    return pos >= 0 and pos + #suffix == #s
+}
+
+function replace(s, pattern, replacement) {
+    return io_strreplace(s, pattern, replacement)
+}
+
+function replaceAll(s, pattern, replacement) {
+    return io_strreplaceall(s, pattern, replacement)
+}
+
+function reverse(s) {
+    loc result = ""
+    loc i = #s - 1
+    while i >= 0 {
+        result = result + charAt(s, i)
+        i = i - 1
+    }
+    return result
+}
+
+function format(template, ...) {
+    return io_strformat(template, ...)
+}
+
+function char(code) {
+    return io_char(code)
+}
+
+function byte(c) {
+    return io_byte(c)
+}
+
+function bytes(s) {
+    return io_strbytes(s)
+}
+
+function fromBytes(arr) {
+    return io_strfrombytes(arr)
+}
+
+function escape(s) {
+    return io_strescape(s)
+}
+
+function unescape(s) {
+    return io_strunescape(s)
+}

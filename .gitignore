@@ -1,0 +1,37 @@
+# Rust
+/target/
+**/target/
+/Cargo.lock
+
+# Build
+*.exe
+*.dll
+*.so
+*.dylib
+*.pdb
+
+# Test
+*.test.tau
+*.tau~
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Installer
+*.zip
+*.tar.gz
+*.msi
+*.pkg
+
+# Temp
+tmp/
+temp/
+*.log

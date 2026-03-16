@@ -1,0 +1,95 @@
+// demo.tau — демонстрация всех фич Taurine v0.3
+
+print("=== 🐂 Taurine v0.3 Demo ===")
+print("")
+
+// 1. Методы таблиц (через присваивание)
+print("--- Методы таблиц ---")
+
+function add_xp(player, amount) {
+    player.xp = player.xp + amount
+}
+
+function heal(player, amount) {
+    player.hp = player.hp + amount
+}
+
+function info(player) {
+    return player.name + " | HP:" + player.hp + " | XP:" + player.xp
+}
+
+// Создаём "класс" Player
+loc Player = {
+    add_xp = add_xp,
+    heal = heal,
+    info = info
+}
+
+// Создаём объекты
+loc p1 = {
+    name = "ffsonDev",
+    hp = 100,
+    xp = 0,
+    add_xp = add_xp,
+    heal = heal,
+    info = info
+}
+
+loc p2 = {
+    name = "Enemy",
+    hp = 50,
+    xp = 0,
+    add_xp = add_xp,
+    heal = heal,
+    info = info
+}
+
+// Вызываем методы (через таблицу)
+p1.add_xp(p1, 100)
+p2.heal(p2, 10)
+
+print(p1.info(p1))
+print(p2.info(p2))
+
+// 2. For-in
+print("")
+print("--- For-in ---")
+for item in [1, 2, 3, 4, 5] {
+    print("Item:", item)
+}
+
+// 3. Try-catch
+print("")
+print("--- Try-catch ---")
+try {
+    print("Всё ок!")
+} catch (err) {
+    print("Ошибка:", err)
+}
+
+// 4. Встроенные функции
+print("")
+print("--- Встроенные функции ---")
+print("type(42) =", type(42))
+print("tonumber('123') =", tonumber("123"))
+print("tostring(456) =", tostring(456))
+
+// 5. Замыкания
+print("")
+print("--- Замыкания ---")
+function makeCounter() {
+    loc count = 0
+    function increment() {
+        count = count + 1
+        return count
+    }
+    return increment
+}
+
+loc counter = makeCounter()
+print("counter() =", counter())
+print("counter() =", counter())
+print("counter() =", counter())
+
+print("")
+print("✅ Demo completed!")

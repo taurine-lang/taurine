@@ -1,0 +1,10 @@
+// examples/date_example.tau — Date example
+
+import "std/date.tau" as date
+
+let now = date.now()
+
+print(f"Timestamp: {now}")
+print(f"Formatted: {date.format(now, '%Y-%m-%d %H:%M:%S')}")
+print(f"Date only: {date.format(now, '%Y-%m-%d')}")
+print(f"Time only: {date.format(now, '%H:%M:%S')}")

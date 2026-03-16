@@ -1,0 +1,33 @@
+// test_fstring.tau
+
+print("=== Test f-strings ===\n")
+
+// Test 1: Simple interpolation
+loc name = "Taurine"
+loc ver = "0.10"
+loc msg = f"Hello from {name} v{ver}!"
+print("Test 1:", msg)
+
+// Test 2: Expression in f-string
+loc x = 10
+loc y = 20
+loc result = f"{x} + {y} = {x + y}"
+print("Test 2:", result)
+
+// Test 3: Multiple variables
+loc a = 1
+loc b = 2
+loc c = 3
+loc str = f"a={a}, b={b}, c={c}"
+print("Test 3:", str)
+
+// Test 4: String with escape
+loc escaped = f"Line1\nLine2"
+print("Test 4:", escaped)
+
+// Test 5: Nested expression
+loc arr = [1, 2, 3]
+loc len_str = f"Array length: {#arr}"
+print("Test 5:", len_str)
+
+print("\n=== All f-string tests passed! ===")

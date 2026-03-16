@@ -1,0 +1,34 @@
+// examples/arrays.tau — Array operations example
+
+import "std/array.tau" as array
+
+let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+print(f"Original: {arr}")
+
+// Map
+let doubled = array.map(arr, x => x * 2)
+print(f"Doubled:  {doubled}")
+
+// Filter
+let evens = array.filter(arr, x => x % 2 == 0)
+print(f"Evens:    {evens}")
+
+// Find
+let found = array.find(arr, x => x > 5)
+print(f"First > 5: {found}")
+
+// Includes
+print(f"Includes 5: {array.includes(arr, 5)}")
+print(f"Includes 15: {array.includes(arr, 15)}")
+
+// Index of
+print(f"Index of 5: {array.indexOf(arr, 5)}")
+
+// Join
+let joined = array.join(arr, ", ")
+print(f"Joined: {joined}")
+
+// Reduce
+let sum = array.reduce(arr, (a, b) => a + b, 0)
+print(f"Sum: {sum}")

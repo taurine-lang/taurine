@@ -1,0 +1,36 @@
+// test_let_const.tau
+
+print("=== Test let/const ===\n")
+
+// Test 1: let works like loc
+print("Test 1: let")
+let x = 10
+let y = 20
+print("  x + y =", x + y)
+x = 100
+print("  x after reassign:", x)
+
+// Test 2: const cannot be reassigned
+print("\nTest 2: const")
+const PI = 3.14
+print("  PI =", PI)
+
+// This should fail:
+// PI = 3  // Uncomment to test error
+
+// Test 3: let with destructuring
+print("\nTest 3: let destructuring")
+let {a, b} = [1, 2]
+print("  a =", a, ", b =", b)
+
+// Test 4: const with destructuring  
+print("\nTest 4: const destructuring")
+const {p, q} = [100, 200]
+print("  p =", p, ", q =", q)
+
+// Test 5: loc still works
+print("\nTest 5: loc (backward compat)")
+loc old = "still works"
+print("  ", old)
+
+print("\n=== All let/const tests passed! ===")

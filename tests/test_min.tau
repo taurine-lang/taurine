@@ -1,0 +1,3 @@
+print("Start")
+import "std/array.tau" as array
+print("Done")

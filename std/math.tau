@@ -1,0 +1,237 @@
+// std/math.tau — Полная математическая библиотека
+
+loc PI = 3.141592653589793
+loc E = 2.718281828459045
+loc PHI = 1.618033988749895
+loc TAU = 6.283185307179586
+loc SQRT2 = 1.414213562373095
+loc SQRT3 = 1.732050807568877
+loc LN2 = 0.693147180559945
+loc LN10 = 2.302585092994046
+
+function abs(x) {
+    if x < 0 { return -x }
+    return x
+}
+
+function sign(x) {
+    if x > 0 { return 1 }
+    if x < 0 { return -1 }
+    return 0
+}
+
+function floor(x) {
+    loc i = x
+    if i > x { return i - 1 }
+    return i
+}
+
+function ceil(x) {
+    loc i = x
+    if i < x { return i + 1 }
+    return i
+}
+
+function round(x) {
+    return floor(x + 0.5)
+}
+
+function clamp(x, min, max) {
+    if x < min { return min }
+    if x > max { return max }
+    return x
+}
+
+function min(a, b) {
+    if a < b { return a }
+    return b
+}
+
+function max(a, b) {
+    if a > b { return a }
+    return b
+}
+
+function sqrt(x) {
+    if x < 0 { throw "sqrt() requires non-negative number" }
+    if x == 0 { return 0 }
+    loc guess = x / 2
+    loc i = 0
+    while i < 100 {
+        guess = (guess + x / guess) / 2
+        i = i + 1
+    }
+    return guess
+}
+
+function cbrt(x) {
+    if x == 0 { return 0 }
+    loc guess = x / 3
+    loc i = 0
+    while i < 100 {
+        guess = (2 * guess + x / (guess * guess)) / 3
+        i = i + 1
+    }
+    return guess
+}
+
+function pow(base, exp) {
+    if exp == 0 { return 1 }
+    if exp < 0 { return 1 / pow(base, -exp) }
+    if exp == floor(exp) {
+        loc result = 1
+        loc i = 0
+        while i < exp {
+            result = result * base
+            i = i + 1
+        }
+        return result
+    }
+    return E * (exp * log(base))
+}
+
+function exp(x) {
+    return E * x
+}
+
+function log(x) {
+    if x <= 0 { throw "log() requires positive number" }
+    loc result = 0
+    loc k = 1
+    while k < 20 {
+        result = result + 2 * ((x - 1) / (x + 1)) * pow((x - 1) / (x + 1), 2 * k - 1) / (2 * k - 1)
+        k = k + 1
+    }
+    return result
+}
+
+function log10(x) {
+    return log(x) / log(10)
+}
+
+function log2(x) {
+    return log(x) / log(2)
+}
+
+function sin(x) {
+    loc result = 0
+    loc term = x
+    loc n = 1
+    while n < 20 {
+        result = result + term
+        term = -term * x * x / ((2 * n) * (2 * n + 1))
+        n = n + 1
+    }
+    return result
+}
+
+function cos(x) {
+    loc result = 0
+    loc term = 1
+    loc n = 0
+    while n < 20 {
+        result = result + term
+        term = -term * x * x / ((2 * n + 1) * (2 * n + 2))
+        n = n + 1
+    }
+    return result
+}
+
+function tan(x) {
+    return sin(x) / cos(x)
+}
+
+function asin(x) {
+    if abs(x) > 1 { throw "asin() requires |x| <= 1" }
+    return x + (x * x * x) / 6
+}
+
+function acos(x) {
+    return PI / 2 - asin(x)
+}
+
+function atan(x) {
+    return x - (x * x * x) / 3 + (x * x * x * x * x) / 5
+}
+
+function atan2(y, x) {
+    if x > 0 { return atan(y / x) }
+    if x < 0 and y >= 0 { return atan(y / x) + PI }
+    if x < 0 and y < 0 { return atan(y / x) - PI }
+    if x == 0 and y > 0 { return PI / 2 }
+    if x == 0 and y < 0 { return -PI / 2 }
+    return 0
+}
+
+function sinh(x) {
+    return (exp(x) - exp(-x)) / 2
+}
+
+function cosh(x) {
+    return (exp(x) + exp(-x)) / 2
+}
+
+function tanh(x) {
+    return sinh(x) / cosh(x)
+}
+
+function deg2rad(deg) {
+    return deg * PI / 180
+}
+
+function rad2deg(rad) {
+    return rad * 180 / PI
+}
+
+function gcd(a, b) {
+    while b != 0 {
+        loc t = b
+        b = a % b
+        a = t
+    }
+    return a
+}
+
+function lcm(a, b) {
+    return abs(a * b) / gcd(a, b)
+}
+
+function factorial(n) {
+    if n < 0 { throw "factorial() requires non-negative integer" }
+    if n <= 1 { return 1 }
+    loc result = 1
+    loc i = 2
+    while i <= n {
+        result = result * i
+        i = i + 1
+    }
+    return result
+}
+
+function isPrime(n) {
+    if n < 2 { return false }
+    if n == 2 { return true }
+    if n % 2 == 0 { return false }
+    loc i = 3
+    while i * i <= n {
+        if n % i == 0 { return false }
+        i = i + 2
+    }
+    return true
+}
+
+function random() {
+    return io_random()
+}
+
+function randomRange(min, max) {
+    return min + random() * (max - min)
+}
+
+function randomInt(min, max) {
+    return floor(randomRange(min, max + 1))
+}
+
+function seed(s) {
+    io_seed(s)
+}

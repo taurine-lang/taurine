@@ -1,0 +1,120 @@
+// std/io.tau — Полная библиотека ввода/вывода
+
+function read(path) {
+    return io_read(path)
+}
+
+function readBytes(path) {
+    return io_readbytes(path)
+}
+
+function write(path, content) {
+    return io_write(path, content)
+}
+
+function writeBytes(path, bytes) {
+    return io_writebytes(path, bytes)
+}
+
+function append(path, content) {
+    return io_append(path, content)
+}
+
+function exists(path) {
+    return io_exists(path)
+}
+
+function isFile(path) {
+    return io_isfile(path)
+}
+
+function isDir(path) {
+    return io_isdir(path)
+}
+
+function remove(path) {
+    return io_remove(path)
+}
+
+function mkdir(path) {
+    return io_mkdir(path)
+}
+
+function rmdir(path) {
+    return io_rmdir(path)
+}
+
+function listDir(path) {
+    return io_listdir(path)
+}
+
+function cwd() {
+    return io_cwd()
+}
+
+function chdir(path) {
+    return io_chdir(path)
+}
+
+function platform() {
+    return io_platform()
+}
+
+function arch() {
+    return io_arch()
+}
+
+function env(name) {
+    return io_env(name)
+}
+
+function setenv(name, value) {
+    return io_setenv(name, value)
+}
+
+function getenv(name) {
+    return io_env(name)
+}
+
+function exit(code) {
+    io_exit(code)
+}
+
+function sleep(ms) {
+    io_sleep(ms)
+}
+
+function time() {
+    return io_time()
+}
+
+function date() {
+    return io_date()
+}
+
+function datetime() {
+    return io_datetime()
+}
+
+function clock() {
+    return io_clock()
+}
+
+function input(prompt) {
+    if prompt != nil {
+        print(prompt)
+    }
+    return io_input()
+}
+
+function print(...) {
+    io_print(...)
+}
+
+function println(...) {
+    io_println(...)
+}
+
+function printf(format, ...) {
+    io_printf(format, ...)
+}

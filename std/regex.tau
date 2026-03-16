@@ -1,0 +1,33 @@
+function match(pattern, text) {
+    return regex_match(pattern, text)
+}
+
+function find(pattern, text) {
+    return regex_find(pattern, text)
+}
+
+function replace(pattern, text, replacement) {
+    return regex_replace(pattern, text, replacement)
+}
+
+function findAll(pattern, text) {
+    return regex_find_all(pattern, text)
+}
+
+function compile(pattern) {
+    return {
+        pattern = pattern,
+        match = function(self, text) {
+            return regex_match(self.pattern, text)
+        },
+        find = function(self, text) {
+            return regex_find(self.pattern, text)
+        },
+        replace = function(self, text, replacement) {
+            return regex_replace(self.pattern, text, replacement)
+        },
+        findAll = function(self, text) {
+            return regex_find_all(self.pattern, text)
+        }
+    }
+}

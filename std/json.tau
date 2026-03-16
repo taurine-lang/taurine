@@ -1,0 +1,17 @@
+// std/json.tau — JSON библиотека
+
+function parse(str) {
+    return json_parse(str)
+}
+
+function stringify(obj) {
+    return json_stringify(obj)
+}
+
+function encode(obj) {
+    return json_stringify(obj)
+}
+
+function decode(str) {
+    return json_parse(str)
+}

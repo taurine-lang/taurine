@@ -1,0 +1,4 @@
+// examples/hello.tau — Hello World example
+
+print("Hello from Taurine v1.0!")
+print(f"2 + 2 = {2 + 2}")

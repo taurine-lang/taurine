@@ -1,0 +1,17 @@
+// std/http.tau — HTTP библиотека
+
+function get(url) {
+    return http_get(url)
+}
+
+function post(url, data) {
+    return http_post(url, data)
+}
+
+function put(url, data) {
+    return http_put(url, data)
+}
+
+function delete(url) {
+    return http_delete(url)
+}

@@ -1,0 +1,28 @@
+print("=== Taurine v0.4 ===")
+print("")
+print("--- Escape ---")
+print("Line1\nLine2")
+print("")
+print("--- Stack trace ---")
+try {
+    function a() {
+        function b() {
+            throw "error"
+        }
+        b()
+    }
+    a()
+} catch (e) {
+    print("Caught:", e)
+}
+print("")
+print("--- Math ---")
+import "std/math.tau" as math
+print("PI:", math.PI)
+print("sqrt(16):", math.sqrt(16))
+print("")
+print("--- IO ---")
+print("OS:", io_platform())
+print("Arch:", io_arch())
+print("")
+print("Done!")

@@ -1,0 +1,5 @@
+// test_range.tau
+print("Range test:")
+for i in 1..6 {
+    print("  i =", i)
+}

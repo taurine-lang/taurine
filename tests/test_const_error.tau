@@ -1,0 +1,4 @@
+// test_const_error.tau
+const MAX = 100
+MAX = 200  // Должна быть ошибка
+print("This should not print")

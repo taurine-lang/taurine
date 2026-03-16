@@ -1,0 +1,8 @@
+function compile(pattern) {
+    return {
+        pattern = pattern,
+        match = function(self, text) {
+            return "test"
+        }
+    }
+}

@@ -1,0 +1,19 @@
+// examples/crypto_example.tau — Crypto example
+
+import "std/crypto.tau" as crypto
+
+let message = "Hello, Taurine!"
+
+print(f"Message: {message}\n")
+
+// Hashes
+print(f"MD5:    {crypto.md5(message)}")
+print(f"SHA256: {crypto.sha256(message)}")
+
+// Encoding
+let encoded = crypto.base64Encode(message)
+print(f"\nBase64 encoded: {encoded}")
+print(f"Base64 decoded: {crypto.base64Decode(encoded)}")
+
+// UUID
+print(f"\nRandom UUID: {crypto.uuid()}")

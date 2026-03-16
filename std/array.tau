@@ -1,0 +1,109 @@
+// std/array.tau
+
+function len(arr) {
+    return #arr
+}
+
+function push(arr, value) {
+    io_arraypush(arr, value)
+}
+
+function pop(arr) {
+    return io_arraypop(arr)
+}
+
+function concat(arr1, arr2) {
+    return io_arrayconcat(arr1, arr2)
+}
+
+function reverse(arr) {
+    io_arrayreverse(arr)
+}
+
+function clear(arr) {
+    io_arrayclear(arr)
+}
+
+function get(arr, index) {
+    return io_arrayget(arr, index)
+}
+
+function set(arr, index, value) {
+    io_arrayset(arr, index, value)
+}
+
+function slice(arr, start, length) {
+    loc result = []
+    loc i = start
+    while i < start + length and i < #arr {
+        push(result, arr[i])
+        i = i + 1
+    }
+    return result
+}
+
+function forEach(arr, fn) {
+    for item in arr {
+        fn(item)
+    }
+}
+
+function map(arr, fn) {
+    loc result = []
+    for item in arr {
+        push(result, fn(item))
+    }
+    return result
+}
+
+function filter(arr, fn) {
+    loc result = []
+    for item in arr {
+        if fn(item) {
+            push(result, item)
+        }
+    }
+    return result
+}
+
+function find(arr, fn) {
+    for item in arr {
+        if fn(item) {
+            return item
+        }
+    }
+    return nil
+}
+
+function includes(arr, value) {
+    for item in arr {
+        if item == value {
+            return true
+        }
+    }
+    return false
+}
+
+function indexOf(arr, value) {
+    loc i = 0
+    for item in arr {
+        if item == value {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+function join(arr, delimiter) {
+    loc result = ""
+    loc i = 0
+    while i < #arr {
+        if i > 0 {
+            result = result + delimiter
+        }
+        result = result + tostring(arr[i])
+        i = i + 1
+    }
+    return result
+}

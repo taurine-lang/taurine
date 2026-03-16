@@ -1,0 +1,29 @@
+// examples/regex_example.tau — Regex example
+
+import "std/regex.tau" as regex
+
+// Compile pattern
+let pattern = regex.compile("\\d+")
+
+// Test
+print(f"Pattern '\\d+' matches 'abc123': {pattern:match('abc123')}")
+print(f"Pattern '\\d+' matches 'abc': {pattern:match('abc')}")
+
+// Find
+let match = pattern:find("abc123def")
+if match != nil {
+    print(f"\nFound: {match.text}")
+    print(f"Start: {match.start}")
+    print(f"End: {match.end}")
+}
+
+// Replace
+let replaced = pattern:replace("abc123def", "X")
+print(f"\nReplaced: {replaced}")
+
+// Find all
+let all = pattern:findAll("a1b2c3d4")
+print(f"\nAll matches in 'a1b2c3d4': {#all}")
+for m in all {
+    print(f"  {m.text}")
+}

@@ -1,0 +1,32 @@
+// test_json_tables.tau
+
+print("=== Test JSON-style tables ===\n")
+
+// Test 1: Old style {key = val}
+print("Test 1: Old style {key = val}")
+let old = { name = "test", value = 42 }
+print("  old.name:", old.name)
+print("  old.value:", old.value)
+
+// Test 2: New JSON style {key: val}
+print("\nTest 2: JSON style {key: val}")
+let json = { name: "json", value: 100 }
+print("  json.name:", json.name)
+print("  json.value:", json.value)
+
+// Test 3: Mixed style
+print("\nTest 3: Mixed style")
+let mixed = { a: 1, b = 2, c: 3 }
+print("  mixed.a:", mixed.a)
+print("  mixed.b:", mixed.b)
+print("  mixed.c:", mixed.c)
+
+// Test 4: Nested tables
+print("\nTest 4: Nested tables")
+let nested = { 
+    outer: { inner: "value" },
+    arr: [1, 2, 3]
+}
+print("  nested.outer.inner:", nested.outer.inner)
+
+print("\n=== All JSON-style table tests passed! ===")

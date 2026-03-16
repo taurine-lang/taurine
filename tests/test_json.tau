@@ -1,0 +1,6 @@
+// test_json.tau
+loc json_str = "{ \"name\": \"test\", \"value\": 42 }"
+print("JSON:", json_str)
+loc obj = json_parse(json_str)
+print("obj:", obj)
+print("name:", obj.name)

@@ -1,0 +1,93 @@
+// std/fs.tau — Файловая система
+
+function read(path) {
+    return io_read(path)
+}
+
+function write(path, content) {
+    return io_write(path, content)
+}
+
+function append(path, content) {
+    return io_append(path, content)
+}
+
+function exists(path) {
+    return io_exists(path)
+}
+
+function isFile(path) {
+    return io_isfile(path)
+}
+
+function isDir(path) {
+    return io_isdir(path)
+}
+
+function remove(path) {
+    return io_remove(path)
+}
+
+function mkdir(path) {
+    return io_mkdir(path)
+}
+
+function rmdir(path) {
+    return io_rmdir(path)
+}
+
+function listDir(path) {
+    return io_listdir(path)
+}
+
+function copy(src, dst) {
+    return io_copy(src, dst)
+}
+
+function move(src, dst) {
+    return io_move(src, dst)
+}
+
+function rename(oldPath, newPath) {
+    return io_rename(oldPath, newPath)
+}
+
+function stat(path) {
+    return io_stat(path)
+}
+
+function size(path) {
+    return io_size(path)
+}
+
+function extension(path) {
+    return io_extension(path)
+}
+
+function basename(path) {
+    return io_basename(path)
+}
+
+function dirname(path) {
+    return io_dirname(path)
+}
+
+function join(...) {
+    return io_path_join(...)
+}
+
+function normalize(path) {
+    return io_path_normalize(path)
+}
+
+function isAbsolute(path) {
+    return io_path_is_absolute(path)
+}
+
+function resolve(path) {
+    return io_path_resolve(path)
+}
+
+function relative(from, to) {
+    return io_path_relative(from, to)
+}

@@ -1,0 +1,49 @@
+// std/process.tau — Процессы
+
+function exec(command) {
+    return io_process_exec(command)
+}
+
+function spawn(command, args) {
+    return io_process_spawn(command, args)
+}
+
+function run(command) {
+    return io_process_run(command)
+}
+
+function kill(pid) {
+    return io_process_kill(pid)
+}
+
+function getpid() {
+    return io_process_getpid()
+}
+
+function getppid() {
+    return io_process_getppid()
+}
+
+function cwd() {
+    return io_process_cwd()
+}
+
+function chdir(path) {
+    return io_process_chdir(path)
+}
+
+function env(name) {
+    return io_process_env(name)
+}
+
+function setenv(name, value) {
+    return io_process_setenv(name, value)
+}
+
+function exit(code) {
+    io_process_exit(code)
+}
+
+function sleep(ms) {
+    io_process_sleep(ms)
+}

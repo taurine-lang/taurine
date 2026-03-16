@@ -1,0 +1,41 @@
+// bench.tau — Benchmark для Taurine
+
+// Fibonacci
+function fib(n) {
+    if n <= 1 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+// Loop test
+let sum = 0
+for i in 1..10000 {
+    sum = sum + i
+}
+
+// Array test
+let arr = []
+for i in 1..1000 {
+    io_arraypush(arr, i)
+}
+
+// Table test
+let table = {}
+for i in 1..100 {
+    table["key_" + tostring(i)] = i * 2
+}
+
+// String concatenation
+let str = ""
+for i in 1..100 {
+    str = str + tostring(i)
+}
+
+// Fibonacci
+let fib_result = fib(20)
+
+print("Benchmark completed")
+print("  sum:", sum)
+print("  fib(20):", fib_result)
+print("  array length:", #arr)
+print("  table keys:", #table)
+print("  str length:", #str)

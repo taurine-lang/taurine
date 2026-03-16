@@ -1,0 +1,17 @@
+// std/date.tau
+
+function now() {
+    return date_now()
+}
+
+function timestamp() {
+    return date_now()
+}
+
+function format(timestamp, formatStr) {
+    return date_format(timestamp, formatStr)
+}
+
+function defaultFormat(timestamp) {
+    return date_format(timestamp, "%Y-%m-%d %H:%M:%S")
+}

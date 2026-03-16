@@ -1,0 +1,17 @@
+// examples/json_example.tau — JSON example
+
+import "std/json.tau" as json
+
+// Parse JSON
+let jsonStr = "{ \"name\": \"Taurine\", \"version\": \"1.0\", \"features\": [\"fast\", \"simple\", \"modern\"] }"
+let obj = json.parse(jsonStr)
+
+print("Parsed JSON:")
+print(f"  name: {obj.name}")
+print(f"  version: {obj.version}")
+print(f"  features: {obj.features}")
+
+// Stringify
+let data = { name: "test", value: 42 }
+let encoded = json.stringify(data)
+print(f"\nStringified: {encoded}")

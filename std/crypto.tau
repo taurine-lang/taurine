@@ -1,0 +1,25 @@
+// std/crypto.tau
+
+function md5(data) {
+    return crypto_md5(data)
+}
+
+function sha256(data) {
+    return crypto_sha256(data)
+}
+
+function base64Encode(data) {
+    return crypto_base64_encode(data)
+}
+
+function base64Decode(data) {
+    return crypto_base64_decode(data)
+}
+
+function uuid() {
+    return crypto_uuid()
+}
+
+function randomBytes(length) {
+    return crypto_random_bytes(length)
+}

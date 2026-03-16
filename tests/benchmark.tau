@@ -1,0 +1,51 @@
+print("=== Taurine v0.5 Benchmark ===")
+print("")
+
+// Тест 1: Циклы
+print("--- Loop Test ---")
+loc sum = 0
+loc i = 0
+while i < 10000 {
+    sum = sum + i
+    i = i + 1
+}
+print("Sum 0-9999:", sum)
+
+// Тест 2: Массивы
+print("")
+print("--- Array Test ---")
+loc arr = []
+loc j = 0
+while j < 1000 {
+    io_arraypush(arr, j)
+    j = j + 1
+}
+print("Array length:", #arr)
+
+// Тест 3: Функции
+print("")
+print("--- Function Test ---")
+function fibonacci(n) {
+    if n <= 1 { return n }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+print("fib(20):", fibonacci(20))
+
+// Тест 4: Методы таблиц (исправлено)
+print("")
+print("--- Method Test ---")
+function add_method(self, x) {
+    self.value = self.value + x
+    return self.value
+}
+
+loc obj = {
+    value = 10,
+    add = add_method
+}
+
+obj:add(5)
+print("obj.value:", obj.value)
+
+print("")
+print("✅ Benchmark complete!")

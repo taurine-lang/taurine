@@ -1,0 +1,44 @@
+// examples/test_example.tau — Test example
+
+import "std/test.tau" as test
+
+test.describe("Math tests", function() {
+    test.it("should add numbers", function() {
+        assert(1 + 2 == 3)
+        assert(5 + 7 == 12)
+    })
+    
+    test.it("should multiply", function() {
+        assert_eq(3 * 4, 12)
+        assert_eq(10 * 10, 100)
+    })
+})
+
+test.describe("String tests", function() {
+    test.it("should concatenate", function() {
+        let str = "Hello" + " " + "World"
+        assert(str == "Hello World")
+    })
+    
+    test.it("should interpolate", function() {
+        let name = "Taurine"
+        let msg = f"Hello, {name}!"
+        assert(msg == "Hello, Taurine!")
+    })
+})
+
+test.describe("Array tests", function() {
+    test.it("should have length", function() {
+        let arr = [1, 2, 3]
+        assert(#arr == 3)
+    })
+    
+    test.it("should access elements", function() {
+        let arr = [10, 20, 30]
+        assert(arr[0] == 10)
+        assert(arr[1] == 20)
+    })
+})
+
+// Run all tests
+test.run_tests()

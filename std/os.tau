@@ -1,0 +1,109 @@
+// std/os.tau — Полная библиотека ОС
+
+function platform() {
+    return io_platform()
+}
+
+function arch() {
+    return io_arch()
+}
+
+function cwd() {
+    return io_cwd()
+}
+
+function chdir(path) {
+    return io_chdir(path)
+}
+
+function env(name) {
+    return io_env(name)
+}
+
+function setenv(name, value) {
+    return io_setenv(name, value)
+}
+
+function unsetenv(name) {
+    return io_unsetenv(name)
+}
+
+function exit(code) {
+    io_exit(code)
+}
+
+function sleep(ms) {
+    io_sleep(ms)
+}
+
+function time() {
+    return io_time()
+}
+
+function date() {
+    return io_date()
+}
+
+function datetime() {
+    return io_datetime()
+}
+
+function clock() {
+    return io_clock()
+}
+
+function getpid() {
+    return io_getpid()
+}
+
+function getppid() {
+    return io_getppid()
+}
+
+function exec(command) {
+    return io_exec(command)
+}
+
+function spawn(command, args) {
+    return io_spawn(command, args)
+}
+
+function system(command) {
+    return io_system(command)
+}
+
+function hostname() {
+    return io_hostname()
+}
+
+function username() {
+    return io_username()
+}
+
+function homedir() {
+    return io_homedir()
+}
+
+function tmpdir() {
+    return io_tmpdir()
+}
+
+function cpus() {
+    return io_cpus()
+}
+
+function freemem() {
+    return io_freemem()
+}
+
+function totalmem() {
+    return io_totalmem()
+}
+
+function uptime() {
+    return io_uptime()
+}
+
+function loadavg() {
+    return io_loadavg()
+}
