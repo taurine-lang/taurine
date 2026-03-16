@@ -1,4 +1,0 @@
-// test simple
-import "std/crypto.tau" as crypto
-print("crypto loaded")
-print("md5:", crypto.md5("hello"))

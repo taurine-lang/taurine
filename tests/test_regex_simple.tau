@@ -1,6 +1,0 @@
-// test_regex_simple.tau
-import "std/regex.tau" as regex
-print("regex loaded")
-loc pattern = regex.compile("\\d+")
-print("pattern created")
-print("match:", pattern:match("abc123"))

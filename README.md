@@ -4,6 +4,12 @@
 
 Taurine combines the simplicity of Lua with the performance of compiled languages. It features a clean syntax, powerful built-in functions, and excellent Rust integration.
 
+---
+
+**🇷🇺 [Русская версия](README_RU.md) | [Документация на русском](docs/GUIDE_RU.md)**
+
+---
+
 ## ✨ Features
 
 - **Fast execution** — Optimized interpreter with Rc/RefCell for single-threaded performance

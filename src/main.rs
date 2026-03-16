@@ -113,14 +113,14 @@ fn main() {
 fn run_file(args: Args) {
     let filepath = args.file.unwrap();
     if !filepath.ends_with(".tau") {
-        eprintln!("❌ Error: expected file with .tau extension");
+        eprintln!("Error: Error: expected file with .tau extension");
         std::process::exit(1);
     }
 
     let source = match fs::read_to_string(&filepath) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("❌ Failed to read file '{filepath}': {e}");
+            eprintln!("Error: Failed to read file '{filepath}': {e}");
             std::process::exit(1);
         }
     };
@@ -133,7 +133,7 @@ fn run_file(args: Args) {
 }
 
 fn run_repl() {
-    println!("🐂 Taurine v1.0 REPL");
+    println!("Taurine v1.0 REPL");
     println!("Type 'exit' or 'quit' to exit\n");
 
     let mut interpreter = Interpreter::new(PathBuf::from("."));
@@ -175,13 +175,13 @@ fn run_repl() {
                     eprintln!("{e}");
                 }
             }
-            Err(e) => eprintln!("❌ Parse error: {e}"),
+            Err(e) => eprintln!("Error: Parse error: {e}"),
         }
     }
 }
 
 fn run_demo() {
-    println!("=== 🐂 Taurine v1.0 ===\n");
+    println!("=== Taurine v1.0 ===\n");
     println!("Usage:");
     println!("  taurine <file.tau>     Run a script");
     println!("  taurine --repl         Start REPL");
@@ -200,14 +200,14 @@ for n in nums { print("Number:", n) }
 }
 
 fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, optimize: bool) {
-    println!("📄 File: {filename}\n");
+    println!("File: File: {filename}\n");
 
     let lex_start = Instant::now();
     let tokens = tokenize(source);
     let lex_time = lex_start.elapsed();
 
     if debug {
-        println!("🔍 Tokens:");
+        println!("Tokens: Tokens:");
         for t in &tokens {
             println!("  [{:3}] {:?} -> '{}'", t.line, t.kind, t.lexeme);
         }
@@ -219,14 +219,14 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
     let mut program = match parser.parse() {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("❌ Parse error: {e}");
+            eprintln!("Error: Parse error: {e}");
             std::process::exit(1);
         }
     };
     let parse_time = parse_start.elapsed();
 
     if debug {
-        println!("🌳 AST (before optimization):\n{program:#?}\n");
+        println!("AST AST (before optimization):\n{program:#?}\n");
     }
 
     let opt_time;
@@ -235,16 +235,16 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
         let mut optimizer = Optimizer::new();
         program = optimizer.optimize(program);
         opt_time = opt_start.elapsed();
-        println!("⚡ Optimization: {:.4} ms", opt_time.as_secs_f64() * 1000.0);
+        println!("Optimization Optimization: {:.4} ms", opt_time.as_secs_f64() * 1000.0);
 
         if debug {
-            println!("🌳 AST (after optimization):\n{program:#?}\n");
+            println!("AST AST (after optimization):\n{program:#?}\n");
         }
     }
 
-    println!("⏱  Lexing: {:.4} ms", lex_time.as_secs_f64() * 1000.0);
-    println!("⏱  Parsing: {:.4} ms", parse_time.as_secs_f64() * 1000.0);
-    println!("▶️  Execution:\n---");
+    println!("Time:  Lexing: {:.4} ms", lex_time.as_secs_f64() * 1000.0);
+    println!("Time:  Parsing: {:.4} ms", parse_time.as_secs_f64() * 1000.0);
+    println!("Execution️  Execution:\n---");
 
     let exec_start = Instant::now();
     let mut interpreter = Interpreter::new(base_path);
@@ -255,15 +255,15 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
     match interpreter.interpret(program) {
         Ok(_) => {
             let exec_time = exec_start.elapsed();
-            println!("---\n✅ Success!");
-            println!("⏱  Execution time: {:.4} seconds ({:.2} ms)",
+            println!("---\nSuccess Success!");
+            println!("Time:  Execution time: {:.4} seconds ({:.2} ms)",
                      exec_time.as_secs_f64(),
                      exec_time.as_secs_f64() * 1000.0);
         }
         Err(e) => {
             let exec_time = exec_start.elapsed();
             eprintln!("---\n{e}");
-            eprintln!("⏱  Time until error: {:.4} seconds", exec_time.as_secs_f64());
+            eprintln!("Time:  Time until error: {:.4} seconds", exec_time.as_secs_f64());
             std::process::exit(1);
         }
     }
@@ -275,7 +275,7 @@ fn format_file(args: Args) {
     let source = match fs::read_to_string(&filepath) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("❌ Failed to read file '{}': {}", filepath, e);
+            eprintln!("Error: Failed to read file '{}': {}", filepath, e);
             std::process::exit(1);
         }
     };
@@ -285,7 +285,7 @@ fn format_file(args: Args) {
     let program = match parser.parse() {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("❌ Parse error: {}", e);
+            eprintln!("Error: Parse error: {}", e);
             std::process::exit(1);
         }
     };

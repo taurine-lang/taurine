@@ -1,5 +1,7 @@
 # Taurine Installation Guide
 
+**🇷🇺 [Русская версия](INSTALL_RU.md)**
+
 ## Quick Install
 
 ### Windows (PowerShell)

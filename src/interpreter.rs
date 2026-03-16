@@ -848,8 +848,8 @@ impl Interpreter {
     }
 
     fn format_error_with_traceback(&self, error: &str) -> String {
-        let mut msg = format!("❌ Error: {error}\n");
-        msg.push_str("\n📍 Stack traceback:\n");
+        let mut msg = format!("Error: {error}\n");
+        msg.push_str("\nStack traceback:\n");
         
         if self.call_stack.is_empty() {
             msg.push_str("  [main chunk]\n");
@@ -859,7 +859,7 @@ impl Interpreter {
             }
             msg.push_str("  [main chunk]\n");
         }
-        
+
         msg
     }
 

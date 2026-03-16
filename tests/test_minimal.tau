@@ -1,5 +1,0 @@
-// test_minimal.tau
-loc arr = [1, 2, 3]
-print("arr:", arr)
-arr[0] = 100
-print("arr[0]=100:", arr)
