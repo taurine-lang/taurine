@@ -847,6 +847,19 @@ impl Interpreter {
         Ok(())
     }
 
+    /// Run Taurine source code
+    pub fn run(&mut self, source: &str) -> Result<(), String> {
+        let tokens = crate::lexer::tokenize(source);
+        let mut parser = crate::parser::Parser::new(tokens);
+        let program = parser.parse()?;
+        self.interpret(program)
+    }
+
+    /// Get a variable value by name
+    pub fn get(&self, name: &str) -> Result<Value, String> {
+        self.global.borrow().get(name)
+    }
+
     fn format_error_with_traceback(&self, error: &str) -> String {
         let mut msg = format!("Error: {error}\n");
         msg.push_str("\nStack traceback:\n");
@@ -875,8 +888,7 @@ impl Interpreter {
                     Value::Nil
                 };
                 if is_const {
-                    // Помечаем как константу (добавляем префикс __const__)
-                    self.global.borrow_mut().define(format!("__const__{name}"), value);
+                    self.global.borrow_mut().define_const(name, value);
                 } else {
                     self.global.borrow_mut().define(name, value);
                 }
@@ -908,7 +920,7 @@ impl Interpreter {
             Stmt::Assignment { name, value, line, .. } => {
                 let val = self.evaluate_expr(value)?;
                 // Проверяем, не является ли переменная константой
-                if self.global.borrow().get(&format!("__const__{name}")).is_ok() {
+                if self.global.borrow().is_const(&name) {
                     return Err(format!("Cannot assign to const '{name}' at line {line}"));
                 }
                 self.global.borrow().assign(&name, val.clone())
@@ -1215,15 +1227,8 @@ impl Interpreter {
             Expr::LiteralFalse => Ok(Value::Bool(false)),
             Expr::LiteralNil => Ok(Value::Nil),
             Expr::Identifier(name) => {
-                // Сначала пробуем получить как обычную переменную
-                match self.global.borrow().get(&name) {
-                    Ok(val) => Ok(val),
-                    Err(_) => {
-                        // Если не найдено, пробуем как const (с префиксом)
-                        self.global.borrow().get(&format!("__const__{name}"))
-                            .map_err(|e| format!("{e} at line {line}"))
-                    }
-                }
+                self.global.borrow().get(&name)
+                    .map_err(|e| format!("{e} at line {line}"))
             }
             Expr::Unary { op, expr, line } => {
                 let val = self.evaluate_expr(*expr)?;

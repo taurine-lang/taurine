@@ -1,0 +1,42 @@
+#!/usr/bin/env tau
+// tests/run_all.tau — Run all tests
+
+import "std/io.tau" as io
+
+print("═══════════════════════════════════════════════")
+print("       TAURINE TEST SUITE")
+print("═══════════════════════════════════════════════\n")
+
+let tests = [
+    "math.test.tau",
+    "json.test.tau",
+    "crypto.test.tau",
+    "regex.test.tau",
+    "array.test.tau",
+    "date.test.tau"
+]
+
+let passed = 0
+let failed = 0
+
+for test_file in tests {
+    print(f"Running: {test_file}")
+    print("─────────────────────────────────────────────────")
+    
+    try {
+        import f"tests/{test_file}" as _
+        passed = passed + 1
+        print("")
+    } catch (err) {
+        print(f"❌ FAILED: {err}\n")
+        failed = failed + 1
+    }
+}
+
+print("═══════════════════════════════════════════════")
+print(f"RESULTS: {passed} passed, {failed} failed")
+print("═══════════════════════════════════════════════")
+
+if failed > 0 {
+    throw(f"{failed} test(s) failed")
+}

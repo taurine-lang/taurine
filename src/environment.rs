@@ -17,6 +17,8 @@ pub struct Environment {
     pub values: Rc<RefCell<HashMap<String, Value>>>,
     /// The parent environment (if any).
     parent: Option<Rc<RefCell<Environment>>>,
+    /// Set of constant variable names.
+    constants: Rc<RefCell<HashMap<String, bool>>>,
 }
 
 impl Environment {
@@ -25,6 +27,7 @@ impl Environment {
         Environment {
             values: Rc::new(RefCell::new(HashMap::new())),
             parent: None,
+            constants: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
@@ -33,12 +36,30 @@ impl Environment {
         Environment {
             values: Rc::new(RefCell::new(HashMap::new())),
             parent: Some(parent),
+            constants: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
     /// Defines a new variable in this environment.
     pub fn define(&self, name: String, value: Value) {
-        self.values.borrow_mut().insert(name, value);
+        self.values.borrow_mut().insert(name.clone(), value);
+    }
+
+    /// Defines a new constant in this environment.
+    pub fn define_const(&self, name: String, value: Value) {
+        self.values.borrow_mut().insert(name.clone(), value);
+        self.constants.borrow_mut().insert(name, true);
+    }
+
+    /// Checks if a variable is a constant.
+    pub fn is_const(&self, name: &str) -> bool {
+        if self.constants.borrow().contains_key(name) {
+            return true;
+        }
+        if let Some(parent) = &self.parent {
+            return parent.borrow().is_const(name);
+        }
+        false
     }
 
     /// Gets a variable's value, searching in this environment and parent environments.
@@ -57,8 +78,11 @@ impl Environment {
     /// Assigns a new value to an existing variable.
     ///
     /// Searches in this environment and parent environments.
-    /// Returns an error if the variable is not found.
+    /// Returns an error if the variable is not found or is a constant.
     pub fn assign(&self, name: &str, value: Value) -> Result<(), String> {
+        if self.constants.borrow().contains_key(name) {
+            return Err(format!("Cannot assign to const '{name}'"));
+        }
         if self.values.borrow().contains_key(name) {
             self.values.borrow_mut().insert(name.to_string(), value);
             return Ok(());

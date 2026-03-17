@@ -43,51 +43,68 @@ function slice(arr, start, length) {
 }
 
 function forEach(arr, fn) {
-    for item in arr {
-        fn(item)
+    loc i = 0
+    while i < #arr {
+        fn(io_arrayget(arr, i))
+        i = i + 1
     }
 }
 
 function map(arr, fn) {
     loc result = []
-    for item in arr {
-        push(result, fn(item))
+    loc i = 0
+    loc len = io_arraylen(arr)
+    while i < len {
+        push(result, fn(io_arrayget(arr, i)))
+        i = i + 1
     }
     return result
 }
 
 function filter(arr, fn) {
     loc result = []
-    for item in arr {
+    loc i = 0
+    loc len = io_arraylen(arr)
+    while i < len {
+        loc item = io_arrayget(arr, i)
         if fn(item) {
             push(result, item)
         }
+        i = i + 1
     }
     return result
 }
 
 function find(arr, fn) {
-    for item in arr {
+    loc i = 0
+    loc len = io_arraylen(arr)
+    while i < len {
+        loc item = io_arrayget(arr, i)
         if fn(item) {
             return item
         }
+        i = i + 1
     }
     return nil
 }
 
 function includes(arr, value) {
-    for item in arr {
-        if item == value {
+    loc i = 0
+    loc len = io_arraylen(arr)
+    while i < len {
+        if io_arrayget(arr, i) == value {
             return true
         }
+        i = i + 1
     }
     return false
 }
 
 function indexOf(arr, value) {
     loc i = 0
-    for item in arr {
-        if item == value {
+    loc len = io_arraylen(arr)
+    while i < len {
+        if io_arrayget(arr, i) == value {
             return i
         }
         i = i + 1
@@ -98,11 +115,23 @@ function indexOf(arr, value) {
 function join(arr, delimiter) {
     loc result = ""
     loc i = 0
-    while i < #arr {
+    loc len = io_arraylen(arr)
+    while i < len {
         if i > 0 {
             result = result + delimiter
         }
-        result = result + tostring(arr[i])
+        result = result + tostring(io_arrayget(arr, i))
+        i = i + 1
+    }
+    return result
+}
+
+function reduce(arr, fn, initial) {
+    loc result = initial
+    loc i = 0
+    loc len = io_arraylen(arr)
+    while i < len {
+        result = fn(result, io_arrayget(arr, i))
         i = i + 1
     }
     return result

@@ -1,6 +1,6 @@
 [package]
 name = "taurine"
-version = "1.0.0"
+version = "1.0.5"
 edition = "2024"
 authors = ["ffsonDev"]
 description = "Fast, embeddable scripting language implemented in Rust"
@@ -21,6 +21,23 @@ md5 = "0.7"
 sha2 = "0.10"
 base64 = "0.21"
 uuid = { version = "1.6", features = ["v4"] }
+
+[lib]
+name = "taurine"
+path = "src/lib.rs"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[example]]
+name = "01_basic_rust"
+path = "examples/embedding/01_basic_rust.rs"
+
+[[example]]
+name = "02_calling_functions"
+path = "examples/embedding/02_calling_functions.rs"
+
+[[example]]
+name = "03_rust_functions"
+path = "examples/embedding/03_rust_functions.rs"
 
 [profile.release]
 opt-level = 3
