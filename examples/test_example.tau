@@ -1,4 +1,4 @@
-// examples/test_example.tau — Test example
+// examples/test_example.tau - Test example
 
 import "std/test.tau" as test
 

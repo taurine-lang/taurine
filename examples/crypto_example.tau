@@ -1,4 +1,4 @@
-// examples/crypto_example.tau — Crypto example
+// examples/crypto_example.tau - Crypto example
 
 import "std/crypto.tau" as crypto
 

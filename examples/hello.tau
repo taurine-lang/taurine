@@ -1,4 +1,4 @@
-// examples/hello.tau — Hello World example
+// examples/hello.tau - Hello World example
 
-print("Hello from Taurine v1.0!")
+print("Hello from Taurine v2.0!")
 print(f"2 + 2 = {2 + 2}")

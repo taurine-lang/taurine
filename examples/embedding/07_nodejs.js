@@ -7,7 +7,7 @@
 // Run with:
 //   node 07_nodejs.js
 
-console.log("=== Node.js Embedding Example ===\n");
+console.log("Node.js Embedding Example\n");
 
 // This is a mock demonstration
 // In a real implementation, you would use:
@@ -34,5 +34,5 @@ console.log(`
     console.log(\`Got x = \${x}\`);
 `);
 
-console.log("\n=== Success! ===");
+console.log("\nSuccess!");
 console.log("\nNote: Full Node.js bindings are planned for a future release.");

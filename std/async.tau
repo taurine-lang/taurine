@@ -1,0 +1,247 @@
+// std/async.tau - Async utilities
+
+let Promise = {}
+
+function Promise.new(executor) {
+    let self = {
+        state: "pending",
+        value: nil,
+        onFulfilled: [],
+        onRejected: []
+    }
+
+    function self.resolve(value) {
+        if self.state != "pending" {
+            return
+        }
+        self.state = "fulfilled"
+        self.value = value
+        for callback in self.onFulfilled {
+            callback(value)
+        }
+    }
+
+    function self.reject(reason) {
+        if self.state != "pending" {
+            return
+        }
+        self.state = "rejected"
+        self.value = reason
+        for callback in self.onRejected {
+            callback(reason)
+        }
+    }
+
+    function self.then(onSuccess, onError) {
+        if onSuccess != nil {
+            array.push(self.onFulfilled, onSuccess)
+        }
+        if onError != nil {
+            array.push(self.onRejected, onError)
+        }
+        return self
+    }
+
+    function self.catch(onError) {
+        return self.then(nil, onError)
+    }
+
+    if executor != nil {
+        executor(function(v) self.resolve(v), function(e) self.reject(e))
+    }
+
+    return self
+}
+
+function Promise.all(promises) {
+    let results = []
+    let count = 0
+    let total = array.len(promises)
+
+    let promise = Promise.new(function(resolve, reject) {
+        if total == 0 {
+            resolve(results)
+            return
+        }
+        for i, p in ipairs(promises) {
+            p.then(
+                function(value) {
+                    results[i] = value
+                    count = count + 1
+                    if count == total {
+                        resolve(results)
+                    }
+                },
+                function(error) {
+                    reject(error)
+                }
+            )
+        }
+    })
+    return promise
+}
+
+function Promise.race(promises) {
+    return Promise.new(function(resolve, reject) {
+        for p in promises {
+            p.then(
+                function(value) resolve(value),
+                function(error) reject(error)
+            )
+        }
+    })
+}
+
+function Promise.resolve(value) {
+    return Promise.new(function(resolve, reject) {
+        resolve(value)
+    })
+}
+
+function Promise.reject(reason) {
+    return Promise.new(function(resolve, reject) {
+        reject(reason)
+    })
+}
+
+async function sleep(ms) {
+    async_sleep(ms)
+}
+
+async function sleepSecs(secs) {
+    async_sleep(secs * 1000)
+}
+
+function spawn(fn, ...) {
+    return async_spawn(fn, ...)
+}
+
+function debounce(fn, delay) {
+    let timeout = nil
+    return function(...) {
+        if timeout != nil {
+            // clearTimeout(timeout)
+        }
+        let args = [...]
+        timeout = spawn(function() {
+            sleep(delay)
+            fn(unpack(args))
+        })
+    }
+}
+
+function throttle(fn, limit) {
+    let lastCall = 0
+    let timeout = nil
+    return function(...) {
+        let now = os.time() * 1000
+        if now - lastCall >= limit {
+            lastCall = now
+            return fn(...)
+        }
+    }
+}
+
+async function retry(fn, maxAttempts, delay) {
+    let attempts = 0
+    let lastError = nil
+    while attempts < maxAttempts {
+        attempts = attempts + 1
+        let success, result = pcall(fn)
+        if success {
+            return result
+        }
+        lastError = result
+        if attempts < maxAttempts {
+            await sleep(delay)
+        }
+    }
+    throw "Failed after " + attempts + " attempts: " + lastError
+}
+
+async function parallel(...) {
+    let functions = [...]
+    let results = []
+    let errors = []
+    for i, fn in ipairs(functions) {
+        let success, result = pcall(fn)
+        if success {
+            results[i] = result
+        } else {
+            errors[i] = result
+        }
+    }
+    return results, errors
+}
+
+async function series(...) {
+    let functions = [...]
+    let results = []
+    for i, fn in ipairs(functions) {
+        let success, result = pcall(fn)
+        if !success {
+            return nil, result
+        }
+        results[i] = result
+    }
+    return results
+}
+
+async function withTimeout(fn, timeoutMs) {
+    let result = nil
+    let error = nil
+    let completed = false
+    spawn(function() {
+        let success, res = pcall(fn)
+        if success {
+            result = res
+        } else {
+            error = res
+        }
+        completed = true
+    })
+    let elapsed = 0
+    while !completed && elapsed < timeoutMs {
+        await sleep(10)
+        elapsed = elapsed + 10
+    }
+    if !completed {
+        return nil, "Timeout"
+    }
+    if error != nil {
+        return nil, error
+    }
+    return result
+}
+
+async function delay(fn, ms) {
+    await sleep(ms)
+    return fn()
+}
+
+async function sequence(functions, delayMs) {
+    let results = []
+    for fn in functions {
+        let result = fn()
+        array.push(results, result)
+        if delayMs != nil {
+            await sleep(delayMs)
+        }
+    }
+    return results
+}
+
+return {
+    Promise: Promise,
+    sleep: sleep,
+    sleepSecs: sleepSecs,
+    spawn: spawn,
+    debounce: debounce,
+    throttle: throttle,
+    retry: retry,
+    parallel: parallel,
+    series: series,
+    withTimeout: withTimeout,
+    delay: delay,
+    sequence: sequence,
+}

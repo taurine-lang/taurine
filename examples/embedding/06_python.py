@@ -7,7 +7,7 @@
 # Run with:
 #   python 06_python.py
 
-print("=== Python Embedding Example ===\n")
+print("Python Embedding Example\n")
 
 # This is a mock demonstration
 # In a real implementation, you would use:
@@ -34,5 +34,5 @@ print("""
     print(f"Got x = {x}")
 """)
 
-print("\n=== Success! ===")
+print("\nSuccess!")
 print("\nNote: Full Python bindings are planned for a future release.")

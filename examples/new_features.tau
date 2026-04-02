@@ -1,0 +1,144 @@
+// New features for Taurine
+
+// 1. Classes and OOP
+class Animal {
+    function speak() {
+        print("Some sound")
+    }
+}
+
+class Dog extends Animal {
+    function speak() {
+        print("Woof!")
+    }
+    
+    function bark() {
+        print("Bark bark!")
+    }
+}
+
+// 2. Lambda function
+// -----------------
+let add = (x, y) => x + y
+let square = x => x * x
+let greet = (name = "World") => f"Hello, {name}!"
+
+print(add(2, 3))        // 5
+print(square(4))        // 16
+print(greet())          // Hello, World!
+print(greet("Taurine")) // Hello, Taurine!
+
+// 3. Null Coalescing operations
+// ----------------------------
+let name = nil
+let displayName = name ?? "Anonymous"
+print(displayName) // Anonymous
+
+let count = 0
+let displayCount = count ?? 100
+print(displayCount) // 0 (not nil, so 0 is used)
+
+// Operator ??=
+loc value ??= "default"
+print(value) // default
+
+// 4. Spread operator
+// ------------------
+let arr1 = [1, 2, 3]
+let arr2 = [...arr1, 4, 5, 6]
+print(arr2) // [1, 2, 3, 4, 5, 6]
+
+// 5. Pattern Matching
+// -------------------
+let x = 42
+let result = match x {
+    0 => "zero",
+    1 => "one",
+    n if n > 0 => "positive",
+    _ => "negative"
+}
+print(result) // positive
+
+// 6. Require/Export modules
+// module.tau:
+// export value = 42
+// export function add(a, b) { return a + b }
+
+// main.tau:
+// let mod = require("module.tau")
+// print(mod.value)  // 42
+// print(mod.add(2, 3)) // 5
+
+// 7. Set (unique values)
+let mySet = set([1, 2, 2, 3, 3, 3])
+print(mySet) // {1: true, 2: true, 3: true}
+
+// 8. This and Super in classes
+class Person {
+    name = "Person"
+    
+    function getName() {
+        return this.name
+    }
+}
+
+class Employee extends Person {
+    name = "Employee"
+    
+    function getName() {
+        let parentName = super.getName()
+        return f"{parentName} (Employee)"
+    }
+}
+
+// 9. New for creating instances
+class Rectangle {
+    width = 10
+    height = 20
+    
+    function area() {
+        return this.width * this.height
+    }
+}
+
+let rect = new Rectangle()
+print(rect.area()) // 200
+
+// 10. combination of possibilities
+class Calculator {
+    history = []
+    
+    function add(a, b) {
+        let result = a + b
+        io_arraypush(this.history, f"{a} + {b} = {result}")
+        return result
+    }
+    
+    function getHistory() {
+        return this.history
+    }
+}
+
+let calc = new Calculator()
+calc.add(2, 3)
+calc.add(5, 7)
+print(calc.getHistory()) // ["2 + 3 = 5", "5 + 7 = 12"]
+
+// Lambda with capture
+let multiplier = (factor) => {
+    return (x) => x * factor
+}
+let double = multiplier(2)
+let triple = multiplier(3)
+print(double(5)) // 10
+print(triple(5)) // 15
+
+// Pattern matching with tables
+let point = {x: 10, y: 20}
+let result = match point {
+    {x: 0, y: 0} => "origin",
+    {x: x, y: 0} => f"on x-axis at {x}",
+    {x: 0, y: y} => f"on y-axis at {y}",
+    {x: x, y: y} => f"at ({x}, {y})"
+}
+print(result) // at (10, 20)

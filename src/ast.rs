@@ -1,14 +1,11 @@
 use crate::lexer::TokenKind;
+use crate::string_intern::InternedString;
 
 #[derive(Debug, Clone)]
 pub enum Expr {
     Number(f64),
     String(String),
-    FString {
-        parts: Vec<(String, Option<Box<Expr>>)>,
-        line: usize,
-    },
-    Identifier(String),
+    Identifier(InternedString),
     Binary {
         left: Box<Expr>,
         op: TokenKind,
@@ -29,7 +26,7 @@ pub enum Expr {
     LiteralFalse,
     LiteralNil,
     Table {
-        entries: Vec<(String, Expr)>,
+        entries: Vec<(InternedString, Expr)>,
         line: usize,
     },
     Array {
@@ -58,17 +55,17 @@ pub enum Expr {
     },
     Get {
         object: Box<Expr>,
-        name: String,
+        name: InternedString,
         line: usize,
     },
     SafeGet {
         object: Box<Expr>,
-        name: String,
+        name: InternedString,
         line: usize,
     },
-    Set {
+    SetProperty {
         object: Box<Expr>,
-        name: String,
+        name: InternedString,
         value: Box<Expr>,
         line: usize,
     },
@@ -77,32 +74,109 @@ pub enum Expr {
         line: usize,
     },
     FunctionLiteral {
-        params: Vec<(String, Option<Expr>)>,
+        params: Vec<(InternedString, Option<Expr>)>,
         body: Vec<Stmt>,
+        line: usize,
+    },
+    Lambda {
+        params: Vec<(InternedString, Option<Expr>)>,
+        body: Box<Expr>,
+        line: usize,
+    },
+    Spread {
+        expr: Box<Expr>,
+        line: usize,
+    },
+    NullCoalesce {
+        left: Box<Expr>,
+        right: Box<Expr>,
+        line: usize,
+    },
+    Match {
+        value: Box<Expr>,
+        arms: Vec<MatchArm>,
+        line: usize,
+    },
+    Require {
+        path: String,
+        line: usize,
+    },
+    Export {
+        name: InternedString,
+        value: Box<Expr>,
+        line: usize,
+    },
+    Class {
+        name: InternedString,
+        superclass: Option<InternedString>,
+        methods: Vec<(InternedString, Expr)>,
+        line: usize,
+    },
+    NewInstance {
+        class_name: InternedString,
+        arguments: Vec<Expr>,
+        line: usize,
+    },
+    FString {
+        parts: Vec<(String, Option<Box<Expr>>)>,
+        line: usize,
+    },
+    This {
+        line: usize,
+    },
+    Super {
+        method: InternedString,
+        line: usize,
+    },
+    Set {
+        items: Vec<Expr>,
         line: usize,
     },
 }
 
 #[derive(Debug, Clone)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub guard: Option<Expr>,
+    pub body: Expr,
+}
+
+#[derive(Debug, Clone)]
+pub enum Pattern {
+    Literal(Expr),
+    Identifier(InternedString),
+    Wildcard,
+    Array(Vec<Pattern>),
+    Table(Vec<(InternedString, Pattern)>),
+}
+
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Declaration {
-        name: String,
+        name: InternedString,
         initializer: Option<Expr>,
         line: usize,
         is_const: bool,
     },
     Destructure {
-        names: Vec<String>,
+        names: Vec<InternedString>,
         initializer: Expr,
         line: usize,
     },
     Assignment {
-        name: String,
+        name: InternedString,
         value: Expr,
         line: usize,
         is_const_assign: bool,
     },
+    NullCoalesceAssign {
+        name: InternedString,
+        value: Expr,
+        line: usize,
+    },
     Expression(Expr),
+    Return(Option<Expr>),
+    ReturnMulti(Vec<Expr>),
     If {
         condition: Expr,
         then_branch: Vec<Stmt>,
@@ -122,33 +196,42 @@ pub enum Stmt {
         line: usize,
     },
     ForIn {
-        variable: String,
+        variable: InternedString,
         iterable: Expr,
         body: Vec<Stmt>,
         line: usize,
     },
     Function {
-        name: String,
-        params: Vec<(String, Option<Expr>)>,
+        name: InternedString,
+        params: Vec<(InternedString, Option<Expr>)>,
         body: Vec<Stmt>,
         line: usize,
     },
-    Return(Option<Expr>),
-    ReturnMulti(Vec<Expr>),
     Block(Vec<Stmt>),
     Import {
         path: String,
-        alias: Option<String>,
+        alias: Option<InternedString>,
         line: usize,
     },
     Try {
         body: Vec<Stmt>,
-        catch_var: Option<String>,
+        catch_var: Option<InternedString>,
         catch_body: Vec<Stmt>,
         line: usize,
     },
     Break,
     Continue,
+    Class {
+        name: InternedString,
+        superclass: Option<InternedString>,
+        methods: Vec<(InternedString, Expr)>,
+        line: usize,
+    },
+    Export {
+        name: InternedString,
+        value: Expr,
+        line: usize,
+    },
 }
 
 #[derive(Debug, Clone)]

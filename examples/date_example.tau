@@ -1,4 +1,4 @@
-// examples/date_example.tau — Date example
+// examples/date_example.tau - Date example
 
 import "std/date.tau" as date
 

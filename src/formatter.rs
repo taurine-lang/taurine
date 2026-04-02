@@ -2,6 +2,7 @@
 
 use crate::ast::*;
 use crate::lexer::TokenKind;
+use crate::string_intern::InternedString;
 
 pub struct Formatter {
     indent: usize,
@@ -110,11 +111,11 @@ impl Formatter {
             }
             Stmt::Function { name, params, body, line: _ } => {
                 let params_str = params.iter()
-                    .map(|(p, d)| {
+                    .map(|(p, d): &(InternedString, Option<Expr>)| {
                         if let Some(default) = d {
                             format!("{} = {}", p, self.expr_to_string(default))
                         } else {
-                            p.clone()
+                            p.to_string()
                         }
                     })
                     .collect::<Vec<_>>()
@@ -179,9 +180,10 @@ impl Formatter {
             Stmt::Break => self.writeln("break;"),
             Stmt::Continue => self.writeln("continue;"),
             Stmt::Destructure { names, initializer, line: _ } => {
-                let names_str = names.join(", ");
+                let names_str = names.iter().map(|n: &InternedString| n.to_string()).collect::<Vec<_>>().join(", ");
                 self.writeln(&format!("let {{{names_str}}} = {};", self.expr_to_string(initializer)));
             }
+            _ => {}
         }
     }
 
@@ -189,7 +191,7 @@ impl Formatter {
         match expr {
             Expr::Number(n) => format!("{n}"),
             Expr::String(s) => format!("\"{s}\""),
-            Expr::Identifier(name) => name.clone(),
+            Expr::Identifier(name) => name.to_string(),
             Expr::LiteralTrue => "true".to_string(),
             Expr::LiteralFalse => "false".to_string(),
             Expr::LiteralNil => "nil".to_string(),
@@ -271,19 +273,30 @@ impl Formatter {
                 result.push('"');
                 result
             }
-            Expr::FunctionLiteral { params, body, line: _ } => {
+            Expr::FunctionLiteral { params, body: _, line: _ } => {
                 let params_str = params.iter()
-                    .map(|(p, _)| p.clone())
+                    .map(|(p, _): &(InternedString, Option<Expr>)| p.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("function({params_str}) {{ ... }}")
             }
-            Expr::Set { object, name, value, line: _ } => {
-                format!("{}.{} = {}", self.expr_to_string(object), name, self.expr_to_string(value))
+            Expr::Set { items, line: _ } => {
+                let items_str = items.iter()
+                    .map(|i| self.expr_to_string(i))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("set({{{items_str}}})")
+            }
+            Expr::This { line: _ } => {
+                "this".to_string()
+            }
+            Expr::Super { method, line: _ } => {
+                format!("super.{}", method.id())
             }
             Expr::Throw { expr, line: _ } => {
                 format!("throw {}", self.expr_to_string(expr))
             }
+            _ => String::from("<expr>"),
         }
     }
 }

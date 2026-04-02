@@ -7,7 +7,7 @@ use taurine::Interpreter;
 use std::path::PathBuf;
 
 fn main() -> Result<(), String> {
-    println!("=== Basic Rust Embedding Example ===\n");
+    println!("Basic Rust Embedding Example\n");
 
     // Create interpreter
     let mut interp = Interpreter::new(PathBuf::from("."));
@@ -23,7 +23,7 @@ fn main() -> Result<(), String> {
         print(f"x + y = {sum}")
     "#)?;
 
-    println!("\n=== Success! ===");
+    println!("\nSuccess!");
 
     Ok(())
 }

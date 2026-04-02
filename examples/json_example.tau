@@ -1,9 +1,9 @@
-// examples/json_example.tau — JSON example
+// examples/json_example.tau - JSON example
 
 import "std/json.tau" as json
 
 // Parse JSON
-let jsonStr = "{ \"name\": \"Taurine\", \"version\": \"1.0\", \"features\": [\"fast\", \"simple\", \"modern\"] }"
+let jsonStr = "{ \"name\": \"Taurine\", \"version\": \"2.0\", \"features\": [\"fast\", \"simple\", \"modern\"] }"
 let obj = json.parse(jsonStr)
 
 print("Parsed JSON:")

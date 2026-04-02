@@ -1,8 +1,8 @@
 [package]
 name = "taurine"
-version = "1.0.5"
+version = "2.0.0"
 edition = "2024"
-authors = ["ffsonDev"]
+authors = ["ffsonDev", "Astrum"]
 description = "Fast, embeddable scripting language implemented in Rust"
 license = "MIT"
 repository = "https://github.com/ffsonDev/taurine"
@@ -14,13 +14,38 @@ logos = "0.14"
 clap = { version = "4.4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-reqwest = { version = "0.11", features = ["blocking", "json"] }
-regex = "1.10"
-chrono = "0.4"
-md5 = "0.7"
-sha2 = "0.10"
-base64 = "0.21"
-uuid = { version = "1.6", features = ["v4"] }
+reqwest = { version = "0.11", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }
+regex = { version = "1.10", optional = true }
+chrono = { version = "0.4", optional = true }
+md5 = { version = "0.7", optional = true }
+sha2 = { version = "0.10", optional = true }
+base64 = { version = "0.21", optional = true }
+uuid = { version = "1.6", features = ["v4"], optional = true }
+typed-arena = "2.0"
+smallvec = { version = "1.11", features = ["union"] }
+twox-hash = "1.6"
+thiserror = "1.0"
+
+# Async runtime
+tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "fs", "net", "io-util", "time"], optional = true }
+futures = { version = "0.3", optional = true }
+
+[features]
+default = ["full"]
+full = ["http", "crypto", "regex", "datetime", "async"]
+http = ["dep:reqwest"]
+crypto = ["dep:md5", "dep:sha2", "dep:base64", "dep:uuid"]
+regex = ["dep:regex"]
+datetime = ["dep:chrono"]
+async = ["dep:tokio", "dep:futures"]
+minimal = []
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "benchmark"
+harness = false
 
 [lib]
 name = "taurine"
@@ -43,14 +68,4 @@ path = "examples/embedding/03_rust_functions.rs"
 opt-level = 3
 lto = true
 codegen-units = 1
-strip = true
 panic = "abort"
-
-[package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/v{ version }/taurine-{ target }{ archive-suffix }"
-bin-dir = "taurine{ binary-ext }"
-pkg-fmt = "tgz"
-
-[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
-pkg-fmt = "zip"
-bin-dir = "taurine.exe"

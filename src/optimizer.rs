@@ -3,7 +3,7 @@ use crate::lexer::TokenKind;
 use std::collections::HashMap;
 
 pub struct Optimizer {
-    constants: HashMap<String, Expr>,
+    constants: HashMap<usize, Expr>,
 }
 
 impl Optimizer {
@@ -29,7 +29,7 @@ impl Optimizer {
                 // Constant folding
                 if let Some(ref init) = initializer {
                     if self.is_constant_expr(init) {
-                        self.constants.insert(name.clone(), init.clone());
+                        self.constants.insert(name.id(), init.clone());
                     }
                 }
                 Some(Stmt::Declaration { name, initializer, line, is_const })
@@ -40,10 +40,10 @@ impl Optimizer {
             Stmt::If { condition, then_branch, else_branch, line } => {
                 // Dead code elimination
                 if let Expr::LiteralTrue = condition {
-                    // Всегда true, убираем else
+                   // Always true, remove else
                     Some(Stmt::Block(then_branch))
                 } else if let Expr::LiteralFalse = condition {
-                    // Всегда false, оставляем только else
+                    // Always false, we leave only else
                     else_branch.map(Stmt::Block)
                 } else {
                     Some(Stmt::If {
@@ -60,7 +60,6 @@ impl Optimizer {
             }
             Stmt::While { condition, body, line } => {
                 if let Expr::LiteralFalse = condition {
-                    // Никогда не выполнится, убираем
                     None
                 } else {
                     Some(Stmt::While {
@@ -129,8 +128,8 @@ impl Optimizer {
                 })
             }
             Stmt::Assignment { name, value, line, is_const_assign } => {
-                // Обновляем кэш при присваивании
-                self.constants.remove(&name);
+                // Updating the cache when assigning
+                self.constants.remove(&name.id());
                 Some(Stmt::Assignment {
                     name,
                     value: self.optimize_expr(value),
@@ -155,6 +154,7 @@ impl Optimizer {
             }
             Stmt::Break => Some(Stmt::Break),
             Stmt::Continue => Some(Stmt::Continue),
+            _ => Some(stmt),
         }
     }
 
@@ -180,7 +180,7 @@ impl Optimizer {
             Expr::Unary { op, expr, line } => {
                 let expr_opt = self.optimize_expr(*expr);
                 
-                // Constant folding для унарных операторов
+                // Constant unar folding
                 if let Expr::Number(n) = &expr_opt {
                     if let TokenKind::Minus = op {
                         return Expr::Number(-n);
@@ -191,7 +191,7 @@ impl Optimizer {
             }
             Expr::Identifier(name) => {
                 // Подставляем константы
-                if let Some(const_expr) = self.constants.get(&name) {
+                if let Some(const_expr) = self.constants.get(&name.id()) {
                     return const_expr.clone();
                 }
                 Expr::Identifier(name)
@@ -221,7 +221,6 @@ impl Optimizer {
                     line,
                 }
             }
-            // Остальные выражения без изменений
             _ => expr,
         }
     }

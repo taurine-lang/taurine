@@ -1,4 +1,4 @@
-// examples/regex_example.tau — Regex example
+// examples/regex_example.tau - Regex example
 
 import "std/regex.tau" as regex
 

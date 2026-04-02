@@ -1,14 +1,69 @@
+//! Taurine Parser Module
+//!
+//! This module provides the parser for the Taurine programming language.
+//! It converts a stream of tokens into an Abstract Syntax Tree (AST).
+//!
+//! # Features
+//!
+//! - **Recursive descent parsing** — Top-down parsing approach
+//! - **Operator precedence** — Correct handling of operator priority
+//! - **Error recovery** — Informative error messages with line numbers
+//! - **String interning** — Efficient identifier storage and comparison
+//!
+//! # Grammar Overview
+//!
+//! ```text
+//! program     → declaration*
+//! declaration → import | export | class | function | variable | statement
+//! statement   → if | while | for | return | break | continue | block | expression
+//! expression  → assignment | logic | comparison | term | factor | unary | call | primary
+//! primary     → number | string | identifier | literal | table | array | parenthesized
+//! ```
+//!
+//! # Usage
+//!
+//! ```rust,no_run
+//! use taurine::{tokenize, Parser};
+//!
+//! let source = r#"
+//!     let x = 10
+//!     let y = 20
+//!     print(f"x + y = {x + y}")
+//! "#;
+//!
+//! let tokens = tokenize(source);
+//! let mut parser = Parser::new(tokens);
+//! let program = parser.parse().expect("Failed to parse");
+//! ```
+//!
+//! # Error Handling
+//!
+//! The parser returns `Result<Program, String>` with descriptive error messages:
+//! - Expected token errors
+//! - Unexpected token errors
+//! - Syntax errors with line numbers
+//! - Recursion depth limit exceeded
+
 use crate::lexer::{Token, TokenKind};
-use crate::ast::{Expr, Stmt, Program};
+use crate::ast::{Expr, Stmt, Program, Pattern, MatchArm};
+use crate::string_intern::{StringInterner, InternedString};
+
+const MAX_PARSER_RECURSION_DEPTH: usize = 500;
 
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
+    interner: Option<StringInterner>,
+    recursion_depth: usize,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens, current: 0 }
+        Parser { tokens, current: 0, interner: None, recursion_depth: 0 }
+    }
+
+    pub fn with_interner(tokens: Vec<Token>, interner: StringInterner) -> Self {
+        Parser { tokens, current: 0, interner: Some(interner), recursion_depth: 0 }
     }
 
     pub fn parse(&mut self) -> Result<Program, String> {
@@ -24,9 +79,13 @@ impl Parser {
         if self.match_token(&TokenKind::Import) {
             return self.import_statement(line);
         }
-        if self.match_token(&TokenKind::Loc) 
-            || self.match_token(&TokenKind::Let)
-            || self.match_token(&TokenKind::Const) {
+        if self.match_token(&TokenKind::Export) {
+            return self.export_statement(line);
+        }
+        if self.match_token(&TokenKind::Class) {
+            return self.class_declaration(line);
+        }
+        if self.match_token(&TokenKind::Loc) || self.match_token(&TokenKind::Let) || self.match_token(&TokenKind::Const) {
             return self.variable_declaration(line);
         }
         if self.match_token(&TokenKind::Function) {
@@ -44,72 +103,117 @@ impl Parser {
         }
         let path = self.previous().lexeme.clone();
         let path = path[1..path.len()-1].to_string();
-        
         let alias = if self.match_token(&TokenKind::As) {
             if !self.match_token(&TokenKind::Identifier) {
                 return Err("Expected identifier after 'as'".to_string());
             }
-            Some(self.previous().lexeme.clone())
-        } else {
-            None
-        };
-        
+            Some(self.intern(&self.previous().lexeme.clone()))
+        } else { None };
+        self.match_token(&TokenKind::Semicolon);
         Ok(Stmt::Import { path, alias, line })
     }
 
+    fn export_statement(&mut self, line: usize) -> Result<Stmt, String> {
+        let name = self.consume_identifier()?;
+        self.consume(&TokenKind::Equal, "Expected '=' after export name")?;
+        let value = self.expression()?;
+        self.match_token(&TokenKind::Semicolon);
+        Ok(Stmt::Export { name, value, line })
+    }
+
+    fn class_declaration(&mut self, line: usize) -> Result<Stmt, String> {
+        let name = self.consume_identifier()?;
+        let superclass = if self.match_token(&TokenKind::Extends) {
+            Some(self.consume_identifier()?)
+        } else { None };
+        self.consume(&TokenKind::LBrace, "Expected '{' before class body")?;
+        let mut methods = Vec::new();
+        while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            if self.match_token(&TokenKind::Function) {
+                let method_name = self.consume_identifier()?;
+                self.consume(&TokenKind::LParen, "Expected '(' after method name")?;
+                let mut params = Vec::new();
+                if !self.check(&TokenKind::RParen) {
+                    loop {
+                        let param_name = self.consume_identifier()?;
+                        let default = if self.match_token(&TokenKind::Equal) {
+                            Some(self.expression()?)
+                        } else { None };
+                        params.push((param_name, default));
+                        if !self.match_token(&TokenKind::Comma) { break; }
+                    }
+                }
+                self.consume(&TokenKind::RParen, "Expected ')' after parameters")?;
+                self.consume(&TokenKind::LBrace, "Expected '{' before method body")?;
+                let mut body = Vec::new();
+                while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+                    body.push(self.declaration()?);
+                }
+                self.consume(&TokenKind::RBrace, "Expected '}' after method body")?;
+                let method_fn = Expr::FunctionLiteral { params, body, line };
+                methods.push((method_name, method_fn));
+            } else if self.match_token(&TokenKind::Identifier) {
+                let field_name = self.intern(&self.previous().lexeme.clone());
+                self.consume(&TokenKind::Equal, "Expected '=' after field name")?;
+                let value = self.expression()?;
+                self.consume(&TokenKind::Comma, "Expected ',' or '}' after field")?;
+                methods.push((field_name, value));
+            } else {
+                self.advance();
+            }
+        }
+        self.consume(&TokenKind::RBrace, "Expected '}' after class body")?;
+        self.match_token(&TokenKind::Semicolon);
+        Ok(Stmt::Class { name, superclass, methods, line })
+    }
+
     fn variable_declaration(&mut self, line: usize) -> Result<Stmt, String> {
-        // Определяем тип декларации
         let is_const = self.previous().kind == TokenKind::Const;
+        let is_loc = self.previous().kind == TokenKind::Loc;
         
-        // Check for destructuring: loc/let/const {a, b} = expr
+        // Emit deprecation warning for 'loc'
+        if is_loc {
+            eprintln!("Warning: 'loc' is deprecated, use 'let' instead (line {})", line);
+        }
+        
         if self.match_token(&TokenKind::LBrace) {
             let mut names = Vec::new();
             loop {
                 names.push(self.consume_identifier()?);
-                if !self.match_token(&TokenKind::Comma) {
-                    break;
-                }
+                if !self.match_token(&TokenKind::Comma) { break; }
             }
             self.consume(&TokenKind::RBrace, "Expected '}' after destructuring")?;
             self.consume(&TokenKind::Equal, "Expected '=' after destructuring")?;
             let initializer = self.expression()?;
+            self.match_token(&TokenKind::Semicolon);
             return Ok(Stmt::Destructure { names, initializer, line });
         }
-        
         let name = self.consume_identifier()?;
         let initializer = if self.match_token(&TokenKind::Equal) {
             Some(self.expression()?)
-        } else {
-            None
-        };
+        } else { None };
+        self.match_token(&TokenKind::Semicolon);
         Ok(Stmt::Declaration { name, initializer, line, is_const })
     }
 
     fn function_declaration(&mut self, line: usize) -> Result<Stmt, String> {
         let name = self.consume_identifier()?;
         self.consume(&TokenKind::LParen, "Expected '(' after function name")?;
-
         let mut params = Vec::new();
         if !self.check(&TokenKind::RParen) {
             loop {
                 let param_name = self.consume_identifier()?;
                 let default = if self.match_token(&TokenKind::Equal) {
                     Some(self.expression()?)
-                } else {
-                    None
-                };
+                } else { None };
                 params.push((param_name, default));
-                if !self.match_token(&TokenKind::Comma) {
-                    break;
-                }
+                if !self.match_token(&TokenKind::Comma) { break; }
             }
         }
         self.consume(&TokenKind::RParen, "Expected ')' after parameters")?;
         self.consume(&TokenKind::LBrace, "Expected '{' before function body")?;
-
         let body = self.block()?;
         self.consume(&TokenKind::RBrace, "Expected '}' after function body")?;
-
         Ok(Stmt::Function { name, params, body, line })
     }
 
@@ -117,81 +221,61 @@ impl Parser {
         self.consume(&TokenKind::LBrace, "Expected '{' after 'try'")?;
         let body = self.block()?;
         self.consume(&TokenKind::RBrace, "Expected '}' after try block")?;
-        
         let mut catch_var = None;
         let mut catch_body = Vec::new();
-        
         if self.match_token(&TokenKind::Catch) {
             if self.match_token(&TokenKind::LParen) {
                 if !self.match_token(&TokenKind::Identifier) {
                     return Err("Expected identifier in catch".to_string());
                 }
-                catch_var = Some(self.previous().lexeme.clone());
+                catch_var = Some(self.intern(&self.previous().lexeme.clone()));
                 self.consume(&TokenKind::RParen, "Expected ')' after catch variable")?;
             }
             self.consume(&TokenKind::LBrace, "Expected '{' after catch")?;
             catch_body = self.block()?;
             self.consume(&TokenKind::RBrace, "Expected '}' after catch block")?;
         }
-        
         Ok(Stmt::Try { body, catch_var, catch_body, line })
     }
 
     fn statement(&mut self) -> Result<Stmt, String> {
         let line = self.peek().line;
-        if self.match_token(&TokenKind::If) {
-            return self.if_statement(line);
-        }
-        if self.match_token(&TokenKind::While) {
-            return self.while_statement(line);
-        }
-        if self.match_token(&TokenKind::For) {
-            return self.for_statement(line);
-        }
+        if self.match_token(&TokenKind::If) { return self.if_statement(line); }
+        if self.match_token(&TokenKind::While) { return self.while_statement(line); }
+        if self.match_token(&TokenKind::For) { return self.for_statement(line); }
         if self.match_token(&TokenKind::Return) {
             if self.check(&TokenKind::RBrace) || self.is_at_end() {
                 return Ok(Stmt::Return(None));
             }
-            // Check for multiple return values
             let first = self.expression()?;
             if self.match_token(&TokenKind::Comma) {
                 let mut values = vec![first];
                 loop {
                     values.push(self.expression()?);
-                    if !self.match_token(&TokenKind::Comma) {
-                        break;
-                    }
+                    if !self.match_token(&TokenKind::Comma) { break; }
                 }
+                self.match_token(&TokenKind::Semicolon);
                 return Ok(Stmt::ReturnMulti(values));
             }
+            self.match_token(&TokenKind::Semicolon);
             return Ok(Stmt::Return(Some(first)));
         }
-        if self.match_token(&TokenKind::Break) {
-            return Ok(Stmt::Break);
-        }
-        if self.match_token(&TokenKind::Continue) {
-            return Ok(Stmt::Continue);
-        }
+        if self.match_token(&TokenKind::Break) { self.match_token(&TokenKind::Semicolon); return Ok(Stmt::Break); }
+        if self.match_token(&TokenKind::Continue) { self.match_token(&TokenKind::Semicolon); return Ok(Stmt::Continue); }
         if self.match_token(&TokenKind::Throw) {
             let expr = self.expression()?;
             return Ok(Stmt::Expression(Expr::Throw { expr: Box::new(expr), line }));
         }
-        if self.check(&TokenKind::LBrace) {
-            return self.block().map(Stmt::Block);
+        if self.check(&TokenKind::LBrace) { return self.block().map(Stmt::Block); }
+        if self.check(&TokenKind::Identifier) && self.current + 1 < self.tokens.len() && self.tokens[self.current + 1].kind == TokenKind::Equal {
+            return self.assignment_statement(line);
         }
-        
-        if self.check(&TokenKind::Identifier)
-            && self.current + 1 < self.tokens.len()
-                && self.tokens[self.current + 1].kind == TokenKind::Equal {
-                    return self.assignment_statement(line);
-                }
-        
         self.expression_statement()
     }
 
     fn for_statement(&mut self, line: usize) -> Result<Stmt, String> {
         if self.check(&TokenKind::Identifier) {
-            let var_name = self.peek().lexeme.clone();
+            let var_name = self.intern(&self.peek().lexeme.clone());
             let saved_current = self.current;
             self.advance();
             if self.match_token(&TokenKind::In) {
@@ -204,48 +288,38 @@ impl Parser {
                 self.current = saved_current;
             }
         }
-        
         let has_parens = self.match_token(&TokenKind::LParen);
-        
-        let initializer = if !self.check(&TokenKind::Semicolon) && !self.check(&TokenKind::LBrace) {
+        let initializer = if self.check(&TokenKind::Let) || self.check(&TokenKind::Const) || self.check(&TokenKind::Loc) {
+            self.advance();
+            let name = self.consume_identifier()?;
+            self.consume(&TokenKind::Equal, "Expected '=' in for initializer")?;
+            let init_expr = self.expression()?;
+            Some(Box::new(Expr::Binary { left: Box::new(Expr::Identifier(name)), op: TokenKind::Equal, right: Box::new(init_expr), line }))
+        } else if !self.check(&TokenKind::Semicolon) && !self.check(&TokenKind::LBrace) && !self.check(&TokenKind::RParen) {
             Some(Box::new(self.expression()?))
-        } else {
-            None
-        };
-        
+        } else { None };
         let condition;
         let increment;
-        
         if has_parens {
             self.consume(&TokenKind::Semicolon, "Expected ';' after for initializer")?;
-            
-            condition = if !self.check(&TokenKind::Semicolon) {
+            condition = if !self.check(&TokenKind::Semicolon) && !self.check(&TokenKind::RParen) {
                 Box::new(self.expression()?)
-            } else {
-                Box::new(Expr::LiteralTrue)
-            };
+            } else { Box::new(Expr::LiteralTrue) };
             self.consume(&TokenKind::Semicolon, "Expected ';' after for condition")?;
-            
             increment = if !self.check(&TokenKind::RParen) {
                 Some(Box::new(self.expression()?))
-            } else {
-                None
-            };
+            } else { None };
             self.consume(&TokenKind::RParen, "Expected ')' after for increment")?;
         } else {
             condition = if initializer.is_some() {
                 self.consume(&TokenKind::Comma, "Expected ',' after for initializer")?;
                 Box::new(self.expression()?)
-            } else {
-                Box::new(Expr::LiteralTrue)
-            };
+            } else { Box::new(Expr::LiteralTrue) };
             increment = None;
         }
-        
         self.consume(&TokenKind::LBrace, "Expected '{' after for header")?;
         let body = self.block()?;
         self.consume(&TokenKind::RBrace, "Expected '}' after for body")?;
-        
         Ok(Stmt::For { initializer, condition, increment, body, line })
     }
 
@@ -253,6 +327,7 @@ impl Parser {
         let name = self.consume_identifier()?;
         self.consume(&TokenKind::Equal, "Expected '=' after variable name")?;
         let value = self.expression()?;
+        self.match_token(&TokenKind::Semicolon);
         Ok(Stmt::Assignment { name, value, line, is_const_assign: false })
     }
 
@@ -261,16 +336,12 @@ impl Parser {
         self.consume(&TokenKind::LBrace, "Expected '{' after if condition")?;
         let then_branch = self.block()?;
         self.consume(&TokenKind::RBrace, "Expected '}' after if branch")?;
-        
         let else_branch = if self.match_token(&TokenKind::Else) {
             self.consume(&TokenKind::LBrace, "Expected '{' after else")?;
             let branch = self.block()?;
             self.consume(&TokenKind::RBrace, "Expected '}' after else branch")?;
             Some(branch)
-        } else {
-            None
-        };
-        
+        } else { None };
         Ok(Stmt::If { condition, then_branch, else_branch, line })
     }
 
@@ -292,11 +363,22 @@ impl Parser {
 
     fn expression_statement(&mut self) -> Result<Stmt, String> {
         let expr = self.expression()?;
+        self.match_token(&TokenKind::Semicolon);
         Ok(Stmt::Expression(expr))
     }
 
     fn expression(&mut self) -> Result<Expr, String> {
-        self.or_expr()
+        self.null_coalesce_expr()
+    }
+
+    fn null_coalesce_expr(&mut self) -> Result<Expr, String> {
+        let line = self.peek().line;
+        let mut left = self.or_expr()?;
+        while self.match_token(&TokenKind::NullCoalesce) {
+            let right = self.or_expr()?;
+            left = Expr::NullCoalesce { left: Box::new(left), right: Box::new(right), line };
+        }
+        Ok(left)
     }
 
     fn or_expr(&mut self) -> Result<Expr, String> {
@@ -333,8 +415,7 @@ impl Parser {
     fn comparison(&mut self) -> Result<Expr, String> {
         let line = self.peek().line;
         let mut left = self.term()?;
-        while self.match_token(&TokenKind::Less) || self.match_token(&TokenKind::Greater) 
-            || self.match_token(&TokenKind::LessEqual) || self.match_token(&TokenKind::GreaterEqual) {
+        while self.match_token(&TokenKind::Less) || self.match_token(&TokenKind::Greater) || self.match_token(&TokenKind::LessEqual) || self.match_token(&TokenKind::GreaterEqual) {
             let op = self.previous().kind.clone();
             let right = self.term()?;
             left = Expr::Binary { left: Box::new(left), op, right: Box::new(right), line };
@@ -361,254 +442,249 @@ impl Parser {
             let right = self.unary()?;
             left = Expr::Binary { left: Box::new(left), op, right: Box::new(right), line };
         }
-        
-        // Range expression: start..end
         if self.match_token(&TokenKind::DotDot) {
             let right = self.unary()?;
             return Ok(Expr::Range { start: Box::new(left), end: Box::new(right), line });
         }
-        
         Ok(left)
     }
 
     fn unary(&mut self) -> Result<Expr, String> {
+        if self.recursion_depth >= MAX_PARSER_RECURSION_DEPTH {
+            return Err(format!("Parser recursion depth limit exceeded (max: {})", MAX_PARSER_RECURSION_DEPTH));
+        }
         let line = self.peek().line;
         if self.match_token(&TokenKind::Minus) || self.match_token(&TokenKind::Not) {
             let op = self.previous().kind.clone();
-            let right = self.unary()?;
-            return Ok(Expr::Unary { op, expr: Box::new(right), line });
+            self.recursion_depth += 1;
+            let result = (|| -> Result<Expr, String> {
+                let right = self.unary()?;
+                Ok(Expr::Unary { op, expr: Box::new(right), line })
+            })();
+            self.recursion_depth -= 1;
+            return result;
         }
         if self.match_token(&TokenKind::Hash) {
-            let _op = self.previous().kind.clone();
-            let right = self.unary()?;
-            return Ok(Expr::Length { expr: Box::new(right), line });
+            self.recursion_depth += 1;
+            let result = (|| -> Result<Expr, String> {
+                let right = self.unary()?;
+                Ok(Expr::Length { expr: Box::new(right), line })
+            })();
+            self.recursion_depth -= 1;
+            return result;
         }
         self.call()
     }
 
     fn call(&mut self) -> Result<Expr, String> {
-    let line = self.peek().line;
-    let mut expr = self.primary()?;
-    loop {
-        if self.match_token(&TokenKind::LParen) {
-            let arguments = self.arguments()?;
-            expr = Expr::Call { callee: Box::new(expr), arguments, line };
-        } else if self.match_token(&TokenKind::Dot) {
-            if !self.match_token(&TokenKind::Identifier) {
-                return Err("Expected property name after '.'".to_string());
-            }
-            let name = self.previous().lexeme.clone();
-            if self.match_token(&TokenKind::Equal) {
-                let value = self.expression()?;
-                expr = Expr::Set { object: Box::new(expr), name, value: Box::new(value), line };
-            } else {
-                expr = Expr::Get { object: Box::new(expr), name, line };
-            }
-        } else if self.match_token(&TokenKind::Colon) {
-            if !self.match_token(&TokenKind::Identifier) {
-                return Err("Expected method name after ':'".to_string());
-            }
-            let method = self.previous().lexeme.clone();
+        let line = self.peek().line;
+        let mut expr = self.primary()?;
+        loop {
             if self.match_token(&TokenKind::LParen) {
-                let mut arguments = self.arguments()?;
-                arguments.insert(0, expr.clone());
-                expr = Expr::Call {
-                    callee: Box::new(Expr::Get { object: Box::new(expr.clone()), name: method, line }),
-                    arguments,
-                    line
-                };
+                let arguments = self.arguments()?;
+                expr = Expr::Call { callee: Box::new(expr), arguments, line };
+            } else if self.match_token(&TokenKind::Dot) {
+                if !self.match_token(&TokenKind::Identifier) {
+                    return Err("Expected property name after '.'".to_string());
+                }
+                let name = self.intern(&self.previous().lexeme.clone());
+                if self.match_token(&TokenKind::Equal) {
+                    let value = self.expression()?;
+                    expr = Expr::SetProperty { object: Box::new(expr), name, value: Box::new(value), line };
+                } else {
+                    expr = Expr::Get { object: Box::new(expr), name, line };
+                }
+            } else if self.match_token(&TokenKind::Colon) {
+                if !self.match_token(&TokenKind::Identifier) {
+                    return Err("Expected method name after ':'".to_string());
+                }
+                let method = self.intern(&self.previous().lexeme.clone());
+                if self.match_token(&TokenKind::LParen) {
+                    let mut arguments = self.arguments()?;
+                    arguments.insert(0, expr.clone());
+                    expr = Expr::Call { callee: Box::new(Expr::Get { object: Box::new(expr.clone()), name: method, line }), arguments, line };
+                } else {
+                    return Err("Expected '(' after method name".to_string());
+                }
+            } else if self.match_token(&TokenKind::QuestionDot) {
+                if !self.match_token(&TokenKind::Identifier) {
+                    return Err("Expected property name after '?.'".to_string());
+                }
+                let name = self.intern(&self.previous().lexeme.clone());
+                expr = Expr::SafeGet { object: Box::new(expr), name, line };
+            } else if self.match_token(&TokenKind::LBracket) {
+                let index = self.expression()?;
+                self.consume(&TokenKind::RBracket, "Expected ']' after index")?;
+                if self.match_token(&TokenKind::Equal) {
+                    let value = self.expression()?;
+                    expr = Expr::SetIndex { object: Box::new(expr), index: Box::new(index), value: Box::new(value), line };
+                } else {
+                    expr = Expr::Index { object: Box::new(expr), index: Box::new(index), line };
+                }
             } else {
-                return Err("Expected '(' after method name".to_string());
+                break;
             }
-        } else if self.match_token(&TokenKind::QuestionDot) {
-            if !self.match_token(&TokenKind::Identifier) {
-                return Err("Expected property name after '?.'".to_string());
-            }
-            let name = self.previous().lexeme.clone();
-            expr = Expr::SafeGet { object: Box::new(expr), name, line };
-        } else if self.match_token(&TokenKind::LBracket) {
-            let index = self.expression()?;
-            self.consume(&TokenKind::RBracket, "Expected ']' after index")?;
-            if self.match_token(&TokenKind::Equal) {
-                let value = self.expression()?;
-                expr = Expr::SetIndex {
-                    object: Box::new(expr),
-                    index: Box::new(index),
-                    value: Box::new(value),
-                    line
-                };
-            } else {
-                expr = Expr::Index { object: Box::new(expr), index: Box::new(index), line };
-            }
-        } else {
-            break;
         }
+        Ok(expr)
     }
-    Ok(expr)
-}
 
     fn arguments(&mut self) -> Result<Vec<Expr>, String> {
-    let mut args = Vec::new();
-    
-    if self.check(&TokenKind::RParen) {
-        self.advance();
-        return Ok(args);
-    }
-    
-    loop {
-        args.push(self.expression()?);
-        if !self.match_token(&TokenKind::Comma) {
-            break;
+        let mut args = Vec::new();
+        if self.check(&TokenKind::RParen) {
+            self.advance();
+            return Ok(args);
         }
+        loop {
+            let line = self.peek().line;
+            if self.match_token(&TokenKind::DotDotDot) {
+                let expr = self.expression()?;
+                args.push(Expr::Spread { expr: Box::new(expr), line });
+            } else {
+                args.push(self.expression()?);
+            }
+            if !self.match_token(&TokenKind::Comma) { break; }
+        }
+        if !self.match_token(&TokenKind::RParen) {
+            return Err("Expected ')' after arguments".to_string());
+        }
+        Ok(args)
     }
-    
-    if !self.match_token(&TokenKind::RParen) {
-        return Err("Expected ')' after arguments".to_string());
-    }
-    
-    Ok(args)
-}
 
     fn primary(&mut self) -> Result<Expr, String> {
         let line = self.peek().line;
-
-        if self.match_token(&TokenKind::True) {
-            return Ok(Expr::LiteralTrue);
-        }
-        if self.match_token(&TokenKind::False) {
-            return Ok(Expr::LiteralFalse);
-        }
-        if self.match_token(&TokenKind::Nil) {
-            return Ok(Expr::LiteralNil);
-        }
+        if self.match_token(&TokenKind::True) { return Ok(Expr::LiteralTrue); }
+        if self.match_token(&TokenKind::False) { return Ok(Expr::LiteralFalse); }
+        if self.match_token(&TokenKind::Nil) { return Ok(Expr::LiteralNil); }
         if self.match_token(&TokenKind::Number) {
             let num: f64 = self.previous().lexeme.parse().map_err(|_| "Invalid number")?;
             return Ok(Expr::Number(num));
         }
+        if self.match_token(&TokenKind::FString) { return self.fstring_literal(line); }
         if self.match_token(&TokenKind::String) {
-            let s = self.previous().lexeme[1..self.previous().lexeme.len()-1].to_string();
-            let s = s.replace("\\n", "\n")
-                     .replace("\\t", "\t")
-                     .replace("\\r", "\r")
-                     .replace("\\\"", "\"")
-                     .replace("\\'", "'")
-                     .replace("\\\\", "\\");
-            return Ok(Expr::String(s));
+            let s = self.previous().lexeme.clone();
+            return Ok(Expr::String(s[1..s.len()-1].to_string()));
         }
-        if self.match_token(&TokenKind::FString) {
-            return self.fstring_literal(line);
-        }
-        if self.match_token(&TokenKind::Function) {
-            return self.function_literal(line);
-        }
-        if self.match_token(&TokenKind::Identifier) {
-            return Ok(Expr::Identifier(self.previous().lexeme.clone()));
+        if self.match_token(&TokenKind::Match) { return self.match_expression(line); }
+        if self.match_token(&TokenKind::Require) {
+            self.consume(&TokenKind::LParen, "Expected '(' after require")?;
+            if !self.match_token(&TokenKind::String) {
+                return Err("Expected string path after require".to_string());
+            }
+            let path = self.previous().lexeme.clone();
+            let path = path[1..path.len()-1].to_string();
+            self.consume(&TokenKind::RParen, "Expected ')' after require path")?;
+            return Ok(Expr::Require { path, line });
         }
         if self.match_token(&TokenKind::LBrace) {
+            if self.check_lambda() { return self.lambda_literal(line); }
             return self.table_literal(line);
         }
-        if self.match_token(&TokenKind::LBracket) {
-            return self.array_literal(line);
-        }
+        if self.match_token(&TokenKind::LBracket) { return self.array_literal(line); }
         if self.match_token(&TokenKind::LParen) {
+            if self.check_lambda() { return self.lambda_literal(line); }
             let expr = self.expression()?;
             self.consume(&TokenKind::RParen, "Expected ')' after expression")?;
             return Ok(expr);
         }
+        if self.match_token(&TokenKind::Identifier) {
+            if self.match_token(&TokenKind::FatArrow) {
+                let param_name = self.intern(&self.previous().lexeme.clone());
+                let body = self.expression()?;
+                return Ok(Expr::Lambda { params: vec![(param_name, None)], body: Box::new(body), line });
+            }
+            let lexeme = self.previous().lexeme.clone();
+            return Ok(Expr::Identifier(self.intern(&lexeme)));
+        }
         Err(format!("Unexpected token: {:?} at line {}", self.peek().kind, self.peek().line))
     }
 
-    fn function_literal(&mut self, line: usize) -> Result<Expr, String> {
-        // Для function literal имя опционально (анонимные функции)
-        if self.check(&TokenKind::Identifier) {
-            self.advance(); // Пропускаем имя
+    fn check_lambda(&mut self) -> bool {
+        let start = self.current;
+        let mut result = false;
+        if self.match_token(&TokenKind::LParen) {
+            loop {
+                if self.check(&TokenKind::RParen) { break; }
+                if self.check(&TokenKind::Identifier) {
+                    self.advance();
+                    if self.match_token(&TokenKind::Equal) {
+                        if !self.check(&TokenKind::RParen) && !self.check(&TokenKind::Comma) { self.advance(); }
+                    }
+                } else { break; }
+                if self.check(&TokenKind::Comma) { self.advance(); } else { break; }
+            }
+            if self.match_token(&TokenKind::RParen) { result = self.check(&TokenKind::FatArrow); }
         }
-        self.consume(&TokenKind::LParen, "Expected '(' after function name")?;
+        self.current = start;
+        result
+    }
 
+    fn lambda_literal(&mut self, line: usize) -> Result<Expr, String> {
         let mut params = Vec::new();
         if !self.check(&TokenKind::RParen) {
             loop {
                 let param_name = self.consume_identifier()?;
                 let default = if self.match_token(&TokenKind::Equal) {
                     Some(self.expression()?)
-                } else {
-                    None
-                };
+                } else { None };
                 params.push((param_name, default));
-                if !self.match_token(&TokenKind::Comma) {
-                    break;
-                }
+                if !self.match_token(&TokenKind::Comma) { break; }
             }
         }
         self.consume(&TokenKind::RParen, "Expected ')' after parameters")?;
-        self.consume(&TokenKind::LBrace, "Expected '{' before function body")?;
-
-        let body = self.block()?;
-        self.consume(&TokenKind::RBrace, "Expected '}' after function body")?;
-
-        Ok(Expr::FunctionLiteral { params, body, line })
+        self.consume(&TokenKind::FatArrow, "Expected '=>' in lambda")?;
+        if self.check(&TokenKind::LBrace) {
+            let body_stmts = self.block()?;
+            let body_expr = if body_stmts.is_empty() {
+                Expr::LiteralNil
+            } else if let Stmt::Expression(expr) = &body_stmts[0] {
+                expr.clone()
+            } else {
+                return Err("Lambda body must be an expression".to_string());
+            };
+            return Ok(Expr::Lambda { params, body: Box::new(body_expr), line });
+        }
+        let body = self.expression()?;
+        Ok(Expr::Lambda { params, body: Box::new(body), line })
     }
 
-    fn fstring_literal(&mut self, line: usize) -> Result<Expr, String> {
-        let raw = self.previous().lexeme.clone();
-        // Remove 'f"' prefix and '"' suffix
-        let content = &raw[2..raw.len()-1];
-        
-        let mut parts = Vec::new();
-        let mut current_str = String::new();
-        let mut chars = content.chars().peekable();
-        
-        while let Some(c) = chars.next() {
-            if c == '\\' {
-                if let Some(next) = chars.next() {
-                    match next {
-                        'n' => current_str.push('\n'),
-                        't' => current_str.push('\t'),
-                        'r' => current_str.push('\r'),
-                        '"' => current_str.push('"'),
-                        '\\' => current_str.push('\\'),
-                        _ => {
-                            current_str.push('\\');
-                            current_str.push(next);
-                        }
-                    }
-                }
-            } else if c == '{' {
-                if !current_str.is_empty() {
-                    parts.push((current_str, None));
-                    current_str = String::new();
-                }
-                // Parse expression inside {}
-                let mut expr_str = String::new();
-                let mut depth = 1;
-                while let Some(c) = chars.next() {
-                    if c == '{' {
-                        depth += 1;
-                        expr_str.push(c);
-                    } else if c == '}' {
-                        depth -= 1;
-                        if depth == 0 {
-                            break;
-                        }
-                        expr_str.push(c);
-                    } else {
-                        expr_str.push(c);
-                    }
-                }
-                // Parse the expression
-                let mut expr_parser = crate::parser::Parser::new(crate::lexer::tokenize(&expr_str));
-                let expr = expr_parser.expression()?;
-                parts.push((String::new(), Some(Box::new(expr))));
-            } else {
-                current_str.push(c);
-            }
+    fn match_expression(&mut self, line: usize) -> Result<Expr, String> {
+        let value = self.expression()?;
+        self.consume(&TokenKind::LBrace, "Expected '{' after match value")?;
+        let mut arms = Vec::new();
+        while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            let pattern = self.pattern()?;
+            let guard = if self.match_token(&TokenKind::If) {
+                Some(self.expression()?)
+            } else { None };
+            self.consume(&TokenKind::FatArrow, "Expected '=>' in match arm")?;
+            let body = self.expression()?;
+            arms.push(MatchArm { pattern, guard, body });
+            self.match_token(&TokenKind::Comma);
         }
-        
-        if !current_str.is_empty() {
-            parts.push((current_str, None));
+        self.consume(&TokenKind::RBrace, "Expected '}' after match arms")?;
+        Ok(Expr::Match { value: Box::new(value), arms, line })
+    }
+
+    fn pattern(&mut self) -> Result<Pattern, String> {
+        let line = self.peek().line;
+        if self.match_token(&TokenKind::Underscore) { return Ok(Pattern::Wildcard); }
+        if self.match_token(&TokenKind::Identifier) {
+            let name = self.intern(&self.previous().lexeme.clone());
+            return Ok(Pattern::Identifier(name));
         }
-        
-        Ok(Expr::FString { parts, line })
+        if self.match_token(&TokenKind::Number) {
+            let num: f64 = self.previous().lexeme.parse().map_err(|_| "Invalid number")?;
+            return Ok(Pattern::Literal(Expr::Number(num)));
+        }
+        if self.match_token(&TokenKind::FString) {
+            let _ = self.fstring_literal(line);
+            return Err("FString not supported in pattern".to_string());
+        }
+        if self.match_token(&TokenKind::String) {
+            let s = self.previous().lexeme.clone();
+            return Ok(Pattern::Literal(Expr::String(s[1..s.len()-1].to_string())));
+        }
+        Err(format!("Unexpected token in pattern: {:?}", self.peek().kind))
     }
 
     fn table_literal(&mut self, line: usize) -> Result<Expr, String> {
@@ -617,19 +693,17 @@ impl Parser {
             if !self.match_token(&TokenKind::Identifier) {
                 return Err("Expected identifier in table".to_string());
             }
-            let key = self.previous().lexeme.clone();
-            
-            // Поддерживаем оба стиля: {key = val} и {key: val}
+            let key = self.intern(&self.previous().lexeme.clone());
             if self.match_token(&TokenKind::Equal) || self.match_token(&TokenKind::Colon) {
                 let value = self.expression()?;
                 entries.push((key, value));
             } else {
-                return Err("Expected '=' or ':' after table key".to_string());
+                let value = self.expression()?;
+                entries.push((key, value));
             }
-            
             self.match_token(&TokenKind::Comma);
         }
-        self.consume(&TokenKind::RBrace, "Expected '}' after table")?;
+        self.consume(&TokenKind::RBrace, "Expected '}' after table entries")?;
         Ok(Expr::Table { entries, line })
     }
 
@@ -637,21 +711,30 @@ impl Parser {
         let mut items = Vec::new();
         while !self.check(&TokenKind::RBracket) && !self.is_at_end() {
             items.push(self.expression()?);
-            if !self.match_token(&TokenKind::Comma) {
-                break;
-            }
+            if !self.match_token(&TokenKind::Comma) { break; }
         }
-        self.consume(&TokenKind::RBracket, "Expected ']' after array")?;
+        self.consume(&TokenKind::RBracket, "Expected ']' after array items")?;
         Ok(Expr::Array { items, line })
     }
 
-    fn match_token(&mut self, kind: &TokenKind) -> bool {
-        if self.check(kind) {
-            self.advance();
-            true
+    fn intern(&mut self, s: &str) -> InternedString {
+        if let Some(ref mut interner) = self.interner {
+            InternedString::new(interner.intern(s))
         } else {
-            false
+            InternedString::new(0)
         }
+    }
+
+    fn consume_identifier(&mut self) -> Result<InternedString, String> {
+        if !self.match_token(&TokenKind::Identifier) {
+            return Err("Expected identifier".to_string());
+        }
+        let lexeme = self.previous().lexeme.clone();
+        Ok(self.intern(&lexeme))
+    }
+
+    fn match_token(&mut self, kind: &TokenKind) -> bool {
+        if self.check(kind) { self.advance(); true } else { false }
     }
 
     fn check(&self, kind: &TokenKind) -> bool {
@@ -659,32 +742,66 @@ impl Parser {
         self.peek().kind == *kind
     }
 
-    fn advance(&mut self) {
-        if !self.is_at_end() { self.current += 1; }
-    }
+    fn advance(&mut self) { if !self.is_at_end() { self.current += 1; } }
 
-    fn is_at_end(&self) -> bool {
-        self.current >= self.tokens.len()
-    }
+    fn is_at_end(&self) -> bool { self.current >= self.tokens.len() }
 
-    fn peek(&self) -> &Token {
-        &self.tokens[self.current]
-    }
+    fn peek(&self) -> &Token { &self.tokens[self.current] }
 
-    fn previous(&self) -> &Token {
-        &self.tokens[self.current - 1]
-    }
+    fn previous(&self) -> &Token { &self.tokens[self.current - 1] }
 
     fn consume(&mut self, kind: &TokenKind, message: &str) -> Result<(), String> {
         if self.match_token(kind) { return Ok(()); }
         Err(format!("{} at line {}", message, self.peek().line))
     }
+}
 
-    fn consume_identifier(&mut self) -> Result<String, String> {
-        if self.match_token(&TokenKind::Identifier) {
-            Ok(self.previous().lexeme.clone())
-        } else {
-            Err(format!("Expected identifier at line {}", self.peek().line))
+impl Parser {
+    fn fstring_literal(&mut self, line: usize) -> Result<Expr, String> {
+        let lexeme = self.previous().lexeme.clone();
+        let content = lexeme[2..lexeme.len()-1].to_string();
+        let mut parts = Vec::new();
+        let mut current_str = String::new();
+        let mut chars = content.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '{' {
+                if !current_str.is_empty() {
+                    parts.push((current_str.clone(), None));
+                    current_str.clear();
+                }
+                let mut expr_str = String::new();
+                while let Some(&c) = chars.peek() {
+                    if c == '}' {
+                        chars.next();
+                        break;
+                    }
+                    expr_str.push(chars.next().unwrap());
+                }
+                let tokens = crate::lexer::tokenize(&expr_str);
+                let mut expr_parser = Parser::new(tokens);
+                let expr = expr_parser.expression()?;
+                parts.push((String::new(), Some(Box::new(expr))));
+            } else if c == '\\' {
+                if let Some(&next) = chars.peek() {
+                    match next {
+                        'n' => { chars.next(); current_str.push('\n'); }
+                        't' => { chars.next(); current_str.push('\t'); }
+                        'r' => { chars.next(); current_str.push('\r'); }
+                        '"' => { chars.next(); current_str.push('"'); }
+                        '\'' => { chars.next(); current_str.push('\''); }
+                        '\\' => { chars.next(); current_str.push('\\'); }
+                        _ => current_str.push(c),
+                    }
+                } else {
+                    current_str.push(c);
+                }
+            } else {
+                current_str.push(c);
+            }
         }
+        if !current_str.is_empty() {
+            parts.push((current_str, None));
+        }
+        Ok(Expr::FString { parts, line })
     }
 }

@@ -7,7 +7,7 @@ use taurine::{Interpreter, Value};
 use std::path::PathBuf;
 
 fn main() -> Result<(), String> {
-    println!("=== Getting Values from Taurine ===\n");
+    println!("Getting Values from Taurine\n");
 
     let mut interp = Interpreter::new(PathBuf::from("."));
 
@@ -36,7 +36,7 @@ fn main() -> Result<(), String> {
         println!("  arr = {:?}", arr);
     }
 
-    println!("\n=== Success! ===");
+    println!("\nSuccess!");
 
     Ok(())
 }

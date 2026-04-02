@@ -1,4 +1,4 @@
-// examples/fibonacci.tau — Fibonacci sequence
+// examples/fibonacci.tau - Fibonacci sequence
 
 function fib(n) {
     if n <= 1 { return n }
@@ -9,4 +9,3 @@ print("Fibonacci sequence:")
 for i in 1..15 {
     print(f"  fib({i}) = {fib(i)}")
 }
-

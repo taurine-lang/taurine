@@ -34,9 +34,7 @@ pub struct TaurineValue {
     value: Value,
 }
 
-// ============================================================================
 // VM Management
-// ============================================================================
 
 /// Create a new Taurine VM
 #[unsafe(no_mangle)]
@@ -79,9 +77,7 @@ pub extern "C" fn taurine_free(vm: *mut TaurineVM) {
     }
 }
 
-// ============================================================================
 // Execution
-// ============================================================================
 
 /// Run Taurine code
 #[unsafe(no_mangle)]
@@ -160,9 +156,7 @@ pub extern "C" fn taurine_get_error(vm: *mut TaurineVM) -> *const c_char {
     }
 }
 
-// ============================================================================
 // Value Creation
-// ============================================================================
 
 /// Create a new number value
 #[unsafe(no_mangle)]
@@ -217,9 +211,7 @@ pub extern "C" fn taurine_value_free(val: *mut TaurineValue) {
     }
 }
 
-// ============================================================================
 // Value Type Checking
-// ============================================================================
 
 /// Check if value is a number
 #[unsafe(no_mangle)]
@@ -281,9 +273,7 @@ pub extern "C" fn taurine_is_table(val: *const TaurineValue) -> c_int {
     matches!(val.value, Value::Table(_)) as c_int
 }
 
-// ============================================================================
 // Value Conversion
-// ============================================================================
 
 /// Convert value to number
 #[unsafe(no_mangle)]
@@ -328,9 +318,7 @@ pub extern "C" fn taurine_as_bool(val: *const TaurineValue) -> c_int {
     }
 }
 
-// ============================================================================
 // Variable Access
-// ============================================================================
 
 /// Get a variable value from VM
 #[unsafe(no_mangle)]
@@ -338,7 +326,7 @@ pub extern "C" fn taurine_get(vm: *mut TaurineVM, name: *const c_char) -> *mut T
     if vm.is_null() || name.is_null() {
         return std::ptr::null_mut();
     }
-    
+
     let vm = unsafe { &mut *vm };
     let name_str = unsafe {
         match CStr::from_ptr(name).to_str() {
@@ -346,7 +334,7 @@ pub extern "C" fn taurine_get(vm: *mut TaurineVM, name: *const c_char) -> *mut T
             Err(_) => return std::ptr::null_mut(),
         }
     };
-    
+
     match vm.interpreter.get(name_str) {
         Ok(value) => Box::into_raw(Box::new(TaurineValue { value })),
         Err(_) => std::ptr::null_mut(),
@@ -358,43 +346,104 @@ pub extern "C" fn taurine_get(vm: *mut TaurineVM, name: *const c_char) -> *mut T
 pub extern "C" fn taurine_set(
     vm: *mut TaurineVM,
     name: *const c_char,
-    _value: *const TaurineValue,
+    value: *const TaurineValue,
 ) -> c_int {
-    if vm.is_null() || name.is_null() {
+    if vm.is_null() || name.is_null() || value.is_null() {
         return -1;
     }
-    
-    // TODO: Implement full set functionality
+
     let vm = unsafe { &mut *vm };
-    vm.last_error = Some("taurine_set: Not fully implemented".to_string());
-    -1
+    let name_str = unsafe {
+        match CStr::from_ptr(name).to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                vm.last_error = Some("Invalid UTF-8 in name".to_string());
+                return -1;
+            }
+        }
+    };
+
+    let taurine_val = unsafe { &*value };
+    
+    // Use the public set method for FFI string-based access
+    vm.interpreter.set(name_str, taurine_val.value.clone()).map(|_| 0).unwrap_or(-1)
 }
 
-// ============================================================================
 // Function Calls
-// ============================================================================
 
 /// Call a Taurine function
 #[unsafe(no_mangle)]
 pub extern "C" fn taurine_call(
     vm: *mut TaurineVM,
     name: *const c_char,
-    _args: *const *const TaurineValue,
-    _arg_count: c_int,
+    args: *const *const TaurineValue,
+    arg_count: c_int,
 ) -> *mut TaurineValue {
     if vm.is_null() || name.is_null() {
         return std::ptr::null_mut();
     }
-    
-    // TODO: Implement full call functionality
+
     let vm = unsafe { &mut *vm };
-    vm.last_error = Some("taurine_call: Not fully implemented".to_string());
-    std::ptr::null_mut()
+    let name_str = unsafe {
+        match CStr::from_ptr(name).to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                vm.last_error = Some("Invalid UTF-8 in name".to_string());
+                return std::ptr::null_mut();
+            }
+        }
+    };
+
+    // Get the function from the VM using the public API
+    let func_result = vm.interpreter.get(name_str);
+    
+    match func_result {
+        Ok(func_value) => {
+            // Convert args from C array to Vec<Value>
+            let mut arg_vec = Vec::new();
+            if !args.is_null() && arg_count > 0 {
+                for i in 0..arg_count {
+                    let arg_ptr = unsafe { *args.offset(i as isize) };
+                    if !arg_ptr.is_null() {
+                        let arg_val = unsafe { &*arg_ptr };
+                        arg_vec.push(arg_val.value.clone());
+                    } else {
+                        arg_vec.push(Value::Nil);
+                    }
+                }
+            }
+
+            // Call the function
+            match &func_value {
+                Value::NativeFunction(native_fn) => {
+                    match native_fn(&arg_vec) {
+                        Ok(result) => Box::into_raw(Box::new(TaurineValue { value: result })),
+                        Err(e) => {
+                            vm.last_error = Some(e);
+                            std::ptr::null_mut()
+                        }
+                    }
+                }
+                Value::Function { .. } => {
+                    // For Taurine functions, we need to execute them
+                    // This is a simplified implementation
+                    vm.last_error = Some("Calling Taurine functions from FFI requires bytecode VM".to_string());
+                    std::ptr::null_mut()
+                }
+                _ => {
+                    vm.last_error = Some(format!("'{name_str}' is not a function"));
+                    std::ptr::null_mut()
+                }
+            }
+        }
+        Err(e) => {
+            vm.last_error = Some(e);
+            std::ptr::null_mut()
+        }
+    }
 }
 
-// ============================================================================
 // String Freeing
-// ============================================================================
 
 /// Free a string returned by Taurine API
 #[unsafe(no_mangle)]

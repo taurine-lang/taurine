@@ -7,7 +7,7 @@ use taurine::Interpreter;
 use std::path::PathBuf;
 
 fn main() -> Result<(), String> {
-    println!("=== Using Taurine from Rust ===\n");
+    println!("Using Taurine from Rust\n");
 
     let mut interp = Interpreter::new(PathBuf::from("."));
 
@@ -44,7 +44,7 @@ fn main() -> Result<(), String> {
         }
     "#)?;
 
-    println!("\n=== Success! ===");
+    println!("\nSuccess!");
 
     Ok(())
 }

@@ -1,4 +1,4 @@
-# 🐂 Taurine
+# Taurine
 
 **Fast, embeddable scripting language implemented in Rust**
 
@@ -6,21 +6,19 @@
 [![License](https://img.shields.io/crates/l/taurine.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 
-[📚 Documentation](https://ffsondev.github.io/taurinedev) | [🦀 Crates.io](https://crates.io/crates/taurine) | [💬 Discord](https://discord.gg/taurine)
-
----
+[Documentation](https://ffsondev.github.io/taurinedev) | [Crates.io](https://crates.io/crates/taurine)
 
 Taurine combines the simplicity of Lua with the performance of compiled languages. It features a clean syntax, powerful built-in functions, and excellent Rust integration.
 
-## ✨ Features
+## Features
 
-- ⚡ **Fast execution** — Optimized interpreter with Rc/RefCell
-- 📝 **Simple syntax** — Lua-like, easy to learn
-- 🚀 **Modern features** — f-strings, multi-return, destructuring, nil-safe operators
-- 📦 **Rich stdlib** — JSON, HTTP, crypto, date/time, regex
-- 🔌 **Embeddable** — Rust API, C API, Python/Node.js bindings
+- **Fast execution** — Optimized interpreter with Rc/RefCell
+- **Simple syntax** — Lua-like, easy to learn
+- **Modern features** — f-strings, multi-return, destructuring, nil-safe operators
+- **Rich stdlib** — JSON, HTTP, crypto, date/time, regex
+- **Embeddable** — Rust API, C API, Python/Node.js bindings
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Install
 
@@ -57,7 +55,7 @@ let y = 20
 print(f"x + y = {x + y}")
 ```
 
-## 📖 Example
+## Example
 
 ```taurine
 // Variables
@@ -84,18 +82,18 @@ let obj = { name: "Taurine", version: VERSION }
 print(obj?.name)  // nil-safe access
 ```
 
-## 📚 Standard Library
+## Standard Library
 
-| Module | Description |
-|--------|-------------|
-| `std/json.tau` | JSON parsing and stringification |
-| `std/http.tau` | HTTP client (GET, POST, PUT, DELETE) |
-| `std/crypto.tau` | MD5, SHA256, Base64, UUID |
-| `std/date.tau` | Date/time formatting |
-| `std/regex.tau` | Regular expressions |
-| `std/array.tau` | Array utilities (map, filter, reduce) |
+Module/Description
 
-## 🔌 Embedding
+`std/json.tau` - JSON parsing and stringification
+`std/http.tau` - HTTP client (GET, POST, PUT, DELETE)
+`std/crypto.tau` - MD5, SHA256, Base64, UUID
+`std/date.tau` - Date/time formatting
+`std/regex.tau` - Regular expressions
+`std/array.tau` - Array utilities (map, filter, reduce)
+
+## Embedding
 
 ### Rust
 
@@ -124,30 +122,15 @@ int main() {
 
 See `examples/embedding/` for more examples.
 
-## ⚙️ System Requirements
-
-- **OS**: Windows 10+, Linux (glibc 2.17+), macOS 10.15+
-- **Architecture**: x86_64, aarch64 (ARM64)
-- **Memory**: 50MB RAM minimum
-- **Disk**: 20MB free space
-
-## 🤝 Contributing
-
-Contributions are welcome! Please see our [Contributing Guide](https://ffsondev.github.io/taurinedev/contributing.html) for details.
-
-## 📄 License
+## License
 
 This project is licensed under the [MIT License](LICENSE).
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 Taurine is inspired by:
 - **Lua** — Simple and embeddable
 - **Rust** — Safety and performance
 - **JavaScript** — Modern syntax features
 
----
-
-**📚 Full documentation available at [https://ffsondev.github.io/taurinedev](https://ffsondev.github.io/taurinedev)**
-
-**Happy coding with Taurine! 🐂**
+**Full documentation available at [https://ffsondev.github.io/taurinedev](https://ffsondev.github.io/taurinedev)**

@@ -1,0 +1,215 @@
+// std/set.tau - Set operations library
+
+let Set = {}
+
+function Set.new(items) {
+    let s = {}
+    if items != nil {
+        for item in items {
+            s[item] = true
+        }
+    }
+    return s
+}
+
+function Set.add(s, item) {
+    s[item] = true
+    return s
+}
+
+function Set.remove(s, item) {
+    s[item] = nil
+    return s
+}
+
+function Set.has(s, item) {
+    return s[item] || false
+}
+
+function Set.size(s) {
+    let count = 0
+    for k, v in pairs(s) {
+        count = count + 1
+    }
+    return count
+}
+
+function Set.isEmpty(s) {
+    return Set.size(s) == 0
+}
+
+function Set.clear(s) {
+    for k in pairs(s) {
+        s[k] = nil
+    }
+    return s
+}
+
+function Set.toArray(s) {
+    let arr = []
+    for item in pairs(s) {
+        array.push(arr, item)
+    }
+    return arr
+}
+
+function Set.union(s1, s2) {
+    let result = {}
+    for item in pairs(s1) {
+        result[item] = true
+    }
+    for item in pairs(s2) {
+        result[item] = true
+    }
+    return result
+}
+
+function Set.intersection(s1, s2) {
+    let result = {}
+    for item in pairs(s1) {
+        if s2[item] {
+            result[item] = true
+        }
+    }
+    return result
+}
+
+function Set.difference(s1, s2) {
+    let result = {}
+    for item in pairs(s1) {
+        if !s2[item] {
+            result[item] = true
+        }
+    }
+    return result
+}
+
+function Set.symmetricDifference(s1, s2) {
+    let result = {}
+    for item in pairs(s1) {
+        if !s2[item] {
+            result[item] = true
+        }
+    }
+    for item in pairs(s2) {
+        if !s1[item] {
+            result[item] = true
+        }
+    }
+    return result
+}
+
+function Set.isSubset(s1, s2) {
+    for item in pairs(s1) {
+        if !s2[item] {
+            return false
+        }
+    }
+    return true
+}
+
+function Set.isSuperset(s1, s2) {
+    return Set.isSubset(s2, s1)
+}
+
+function Set.equals(s1, s2) {
+    if Set.size(s1) != Set.size(s2) {
+        return false
+    }
+    return Set.isSubset(s1, s2) && Set.isSubset(s2, s1)
+}
+
+function Set.disjoint(s1, s2) {
+    for item in pairs(s1) {
+        if s2[item] {
+            return false
+        }
+    }
+    return true
+}
+
+function Set.each(s) {
+    return Set.toArray(s)
+}
+
+function Set.map(s, fn) {
+    let result = {}
+    for item in pairs(s) {
+        let new_item = fn(item)
+        result[new_item] = true
+    }
+    return result
+}
+
+function Set.filter(s, fn) {
+    let result = {}
+    for item in pairs(s) {
+        if fn(item) {
+            result[item] = true
+        }
+    }
+    return result
+}
+
+function Set.find(s, fn) {
+    for item in pairs(s) {
+        if fn(item) {
+            return item
+        }
+    }
+    return nil
+}
+
+function Set.every(s, fn) {
+    for item in pairs(s) {
+        if !fn(item) {
+            return false
+        }
+    }
+    return true
+}
+
+function Set.some(s, fn) {
+    for item in pairs(s) {
+        if fn(item) {
+            return true
+        }
+    }
+    return false
+}
+
+function Set.range(start, end) {
+    let s = {}
+    let i = start
+    while i <= end {
+        s[i] = true
+        i = i + 1
+    }
+    return s
+}
+
+return {
+    new: Set.new,
+    add: Set.add,
+    remove: Set.remove,
+    has: Set.has,
+    size: Set.size,
+    isEmpty: Set.isEmpty,
+    clear: Set.clear,
+    toArray: Set.toArray,
+    each: Set.each,
+    union: Set.union,
+    intersection: Set.intersection,
+    difference: Set.difference,
+    symmetricDifference: Set.symmetricDifference,
+    isSubset: Set.isSubset,
+    isSuperset: Set.isSuperset,
+    equals: Set.equals,
+    disjoint: Set.disjoint,
+    map: Set.map,
+    filter: Set.filter,
+    find: Set.find,
+    every: Set.every,
+    some: Set.some,
+    range: Set.range,
+}
