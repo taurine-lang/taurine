@@ -183,6 +183,44 @@ impl Formatter {
                 let names_str = names.iter().map(|n: &InternedString| n.to_string()).collect::<Vec<_>>().join(", ");
                 self.writeln(&format!("let {{{names_str}}} = {};", self.expr_to_string(initializer)));
             }
+            Stmt::AsyncFunction { name, params, body, line: _ } => {
+                let params_str = params.iter()
+                    .map(|(p, d)| {
+                        if let Some(default) = d {
+                            format!("{} = {}", p, self.expr_to_string(default))
+                        } else {
+                            p.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                self.writeln(&format!("async function {}({}) {{", name, params_str));
+                self.indent += 1;
+                for stmt in body {
+                    self.format_stmt(stmt);
+                }
+                self.indent -= 1;
+                self.writeln("}");
+            }
+            Stmt::Generator { name, params, body, line: _ } => {
+                let params_str = params.iter()
+                    .map(|(p, d)| {
+                        if let Some(default) = d {
+                            format!("{} = {}", p, self.expr_to_string(default))
+                        } else {
+                            p.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                self.writeln(&format!("generator {}({}) {{", name, params_str));
+                self.indent += 1;
+                for stmt in body {
+                    self.format_stmt(stmt);
+                }
+                self.indent -= 1;
+                self.writeln("}");
+            }
             _ => {}
         }
     }
@@ -295,6 +333,30 @@ impl Formatter {
             }
             Expr::Throw { expr, line: _ } => {
                 format!("throw {}", self.expr_to_string(expr))
+            }
+            Expr::Await { future, line: _ } => {
+                format!("await {}", self.expr_to_string(future))
+            }
+            Expr::Yield { value, line: _ } => {
+                if let Some(v) = value {
+                    format!("yield {}", self.expr_to_string(v))
+                } else {
+                    "yield".to_string()
+                }
+            }
+            Expr::AsyncFunctionLiteral { params, body: _, line: _ } => {
+                let params_str = params.iter()
+                    .map(|(p, _)| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("async function({params_str}) {{ ... }}")
+            }
+            Expr::GeneratorLiteral { params, body: _, line: _ } => {
+                let params_str = params.iter()
+                    .map(|(p, _)| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("generator({params_str}) {{ ... }}")
             }
             _ => String::from("<expr>"),
         }

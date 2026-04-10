@@ -27,8 +27,39 @@ pub enum Value {
         body: Vec<crate::ast::Stmt>,
         closure: Rc<RefCell<Environment>>,
     },
+    AsyncFunction {
+        name: usize,
+        params: Vec<usize>,
+        default_params: Vec<crate::ast::Expr>,
+        body: Vec<crate::ast::Stmt>,
+        closure: Rc<RefCell<Environment>>,
+    },
+    Generator {
+        name: usize,
+        params: Vec<usize>,
+        body: Vec<crate::ast::Stmt>,
+        closure: Rc<RefCell<Environment>>,
+        /// Generator execution state
+        state: Rc<RefCell<GeneratorState>>,
+    },
     NativeFunction(fn(&[Value]) -> Result<Value, String>),
+    Future(Rc<RefCell<FutureState>>),
     Error(String),
+}
+
+/// Generator execution state
+#[derive(Clone, Debug, Default)]
+pub struct GeneratorState {
+    pub yielded_values: Vec<Value>,
+    pub consumed_index: usize,
+    pub is_done: bool,
+}
+
+/// Future state for async/await
+#[derive(Clone, Debug)]
+pub enum FutureState {
+    Pending,
+    Ready(Value),
 }
 
 impl PartialEq for Value {
@@ -42,6 +73,9 @@ impl PartialEq for Value {
             (Value::Range { start: s1, end: e1 }, Value::Range { start: s2, end: e2 }) => {
                 s1 == s2 && e1 == e2
             }
+            (Value::Future(_), Value::Future(_)) => false, // Futures are never equal by value
+            (Value::Generator { .. }, Value::Generator { .. }) => false,
+            (Value::AsyncFunction { name: n1, .. }, Value::AsyncFunction { name: n2, .. }) => n1 == n2,
             _ => false,
         }
     }
@@ -70,7 +104,16 @@ impl fmt::Display for Value {
             }
             Value::Range { start, end } => write!(f, "{}..{}", *start as i64, *end as i64),
             Value::Function { name, .. } => write!(f, "<function {name}>"),
+            Value::AsyncFunction { name, .. } => write!(f, "<async function {name}>"),
+            Value::Generator { name, .. } => write!(f, "<generator {name}>"),
             Value::NativeFunction(_) => write!(f, "<native fn>"),
+            Value::Future(state) => {
+                let s = state.borrow();
+                match &*s {
+                    FutureState::Pending => write!(f, "<future pending>"),
+                    FutureState::Ready(v) => write!(f, "<future {v}>"),
+                }
+            }
             Value::Error(msg) => write!(f, "error: {msg}"),
         }
     }

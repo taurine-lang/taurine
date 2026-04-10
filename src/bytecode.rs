@@ -576,6 +576,14 @@ impl Compiler {
                 }
                 instructions.push(Instruction::Set);
             }
+            // Async/await/yield - not yet supported in bytecode mode
+            Expr::AsyncFunctionLiteral { .. } |
+            Expr::GeneratorLiteral { .. } |
+            Expr::Await { .. } |
+            Expr::Yield { .. } => {
+                // Push nil for now
+                instructions.push(Instruction::LoadNil);
+            }
         }
     }
 

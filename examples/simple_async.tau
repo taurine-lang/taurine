@@ -1,0 +1,22 @@
+// Simple async/generator test
+print("=== Async/Gerator Test ===")
+
+// Test async function
+async function fetchData(url) {
+    return "Data from " + url
+}
+
+let result = fetchData("https://api.example.com")
+print(f"Async result: {result}")
+
+// Test generator with yield
+generator countUp(max) {
+    let i = 1
+    while i <= max {
+        yield i
+        i = i + 1
+    }
+}
+
+print("Generator created successfully")
+print("Test complete!")

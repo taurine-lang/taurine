@@ -12,6 +12,7 @@ use taurine::formatter::Formatter;
 #[derive(Parser, Debug)]
 #[command(name = "taurine")]
 #[command(about = "Taurine Programming Language v2.0", long_about = None)]
+#[command(version = "2.0.0")]
 struct Args {
     file: Option<String>,
     #[arg(short, long, default_value_t = false)]
@@ -135,7 +136,9 @@ for n in nums { print("Number:", n) }
 }
 
 fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, optimize: bool) {
-    println!("File: {filename}\n");
+    if debug {
+        println!("File: {filename}\n");
+    }
 
     let lex_start = Instant::now();
     let tokens = tokenize(source);
@@ -177,9 +180,11 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
         }
     }
 
-    println!("Time:  Lexing: {:.4} ms", lex_time.as_secs_f64() * 1000.0);
-    println!("Time:  Parsing: {:.4} ms", parse_time.as_secs_f64() * 1000.0);
-    println!("Execution:\n---");
+    if debug {
+        println!("Time:  Lexing: {:.4} ms", lex_time.as_secs_f64() * 1000.0);
+        println!("Time:  Parsing: {:.4} ms", parse_time.as_secs_f64() * 1000.0);
+        println!("Execution:\n---");
+    }
 
     let exec_start = Instant::now();
     let mut interpreter = Interpreter::new(base_path);
@@ -190,15 +195,15 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
     match interpreter.interpret(program) {
         Ok(_) => {
             let exec_time = exec_start.elapsed();
-            println!("\nSuccess!");
-            println!("Execution time: {:.4} seconds ({:.2} ms)",
-                     exec_time.as_secs_f64(),
-                     exec_time.as_secs_f64() * 1000.0);
+            if debug {
+                println!("\nSuccess!");
+                println!("Execution time: {:.4} seconds ({:.2} ms)",
+                         exec_time.as_secs_f64(),
+                         exec_time.as_secs_f64() * 1000.0);
+            }
         }
         Err(e) => {
-            let exec_time = exec_start.elapsed();
             eprintln!("\n{e}");
-            eprintln!("Time until error: {:.4} seconds", exec_time.as_secs_f64());
             std::process::exit(1);
         }
     }

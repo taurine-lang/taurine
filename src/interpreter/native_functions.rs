@@ -119,6 +119,9 @@ fn register_core_functions(global: &Rc<RefCell<crate::environment::Environment>>
             Value::Array(_) => "array",
             Value::Range { .. } => "range",
             Value::Function { .. } => "function",
+            Value::AsyncFunction { .. } => "async_function",
+            Value::Generator { .. } => "generator",
+            Value::Future(_) => "future",
             Value::NativeFunction(_) => "function",
             Value::Error(_) => "error",
         };

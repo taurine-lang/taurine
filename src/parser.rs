@@ -1,49 +1,3 @@
-//! Taurine Parser Module
-//!
-//! This module provides the parser for the Taurine programming language.
-//! It converts a stream of tokens into an Abstract Syntax Tree (AST).
-//!
-//! # Features
-//!
-//! - **Recursive descent parsing** — Top-down parsing approach
-//! - **Operator precedence** — Correct handling of operator priority
-//! - **Error recovery** — Informative error messages with line numbers
-//! - **String interning** — Efficient identifier storage and comparison
-//!
-//! # Grammar Overview
-//!
-//! ```text
-//! program     → declaration*
-//! declaration → import | export | class | function | variable | statement
-//! statement   → if | while | for | return | break | continue | block | expression
-//! expression  → assignment | logic | comparison | term | factor | unary | call | primary
-//! primary     → number | string | identifier | literal | table | array | parenthesized
-//! ```
-//!
-//! # Usage
-//!
-//! ```rust,no_run
-//! use taurine::{tokenize, Parser};
-//!
-//! let source = r#"
-//!     let x = 10
-//!     let y = 20
-//!     print(f"x + y = {x + y}")
-//! "#;
-//!
-//! let tokens = tokenize(source);
-//! let mut parser = Parser::new(tokens);
-//! let program = parser.parse().expect("Failed to parse");
-//! ```
-//!
-//! # Error Handling
-//!
-//! The parser returns `Result<Program, String>` with descriptive error messages:
-//! - Expected token errors
-//! - Unexpected token errors
-//! - Syntax errors with line numbers
-//! - Recursion depth limit exceeded
-
 use crate::lexer::{Token, TokenKind};
 use crate::ast::{Expr, Stmt, Program, Pattern, MatchArm};
 use crate::string_intern::{StringInterner, InternedString};
@@ -84,6 +38,9 @@ impl Parser {
         }
         if self.match_token(&TokenKind::Class) {
             return self.class_declaration(line);
+        }
+        if self.match_token(&TokenKind::Async) {
+            return self.async_declaration(line);
         }
         if self.match_token(&TokenKind::Loc) || self.match_token(&TokenKind::Let) || self.match_token(&TokenKind::Const) {
             return self.variable_declaration(line);
@@ -217,6 +174,32 @@ impl Parser {
         Ok(Stmt::Function { name, params, body, line })
     }
 
+    fn async_declaration(&mut self, line: usize) -> Result<Stmt, String> {
+        // Check if it's async function or just async identifier
+        if !self.match_token(&TokenKind::Function) {
+            // It's just `async` as a variable name, backtrack
+            return Err("Expected 'function' after 'async'".to_string());
+        }
+        let name = self.consume_identifier()?;
+        self.consume(&TokenKind::LParen, "Expected '(' after function name")?;
+        let mut params = Vec::new();
+        if !self.check(&TokenKind::RParen) {
+            loop {
+                let param_name = self.consume_identifier()?;
+                let default = if self.match_token(&TokenKind::Equal) {
+                    Some(self.expression()?)
+                } else { None };
+                params.push((param_name, default));
+                if !self.match_token(&TokenKind::Comma) { break; }
+            }
+        }
+        self.consume(&TokenKind::RParen, "Expected ')' after parameters")?;
+        self.consume(&TokenKind::LBrace, "Expected '{' before async function body")?;
+        let body = self.block()?;
+        self.consume(&TokenKind::RBrace, "Expected '}' after async function body")?;
+        Ok(Stmt::AsyncFunction { name, params, body, line })
+    }
+
     fn try_statement(&mut self, line: usize) -> Result<Stmt, String> {
         self.consume(&TokenKind::LBrace, "Expected '{' after 'try'")?;
         let body = self.block()?;
@@ -265,6 +248,13 @@ impl Parser {
         if self.match_token(&TokenKind::Throw) {
             let expr = self.expression()?;
             return Ok(Stmt::Expression(Expr::Throw { expr: Box::new(expr), line }));
+        }
+        if self.match_token(&TokenKind::Yield) {
+            let value = if !self.check(&TokenKind::RBrace) && !self.is_at_end() && !self.check(&TokenKind::Semicolon) {
+                Some(Box::new(self.expression()?))
+            } else { None };
+            self.match_token(&TokenKind::Semicolon);
+            return Ok(Stmt::Expression(Expr::Yield { value, line }));
         }
         if self.check(&TokenKind::LBrace) { return self.block().map(Stmt::Block); }
         if self.check(&TokenKind::Identifier) && self.current + 1 < self.tokens.len() && self.tokens[self.current + 1].kind == TokenKind::Equal {
@@ -563,6 +553,15 @@ impl Parser {
         if self.match_token(&TokenKind::String) {
             let s = self.previous().lexeme.clone();
             return Ok(Expr::String(s[1..s.len()-1].to_string()));
+        }
+        if self.match_token(&TokenKind::Await) {
+            // Await should parse the next primary expression (typically a function call or identifier)
+            // We use a loop to skip any nested awaits and get to the actual expression
+            while self.check(&TokenKind::Await) {
+                self.advance();
+            }
+            let future = self.primary()?;
+            return Ok(Expr::Await { future: Box::new(future), line });
         }
         if self.match_token(&TokenKind::Match) { return self.match_expression(line); }
         if self.match_token(&TokenKind::Require) {

@@ -14,6 +14,75 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use smallvec::SmallVec;
 
+/// Получить глобальную директорию пакетов Taurine
+fn get_global_packages_dir() -> PathBuf {
+    let mut path = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."));
+    path.push(".taurine");
+    path.push("packages");
+    path
+}
+
+/// Поиск модуля в нескольких локациях
+fn resolve_module_path(base_path: &PathBuf, module_path: &str) -> Option<PathBuf> {
+    // 1. Текущая директория / относительный путь
+    let local = base_path.join(module_path);
+    if local.exists() {
+        return Some(local);
+    }
+    
+    // 2. Глобальный кеш пакетов (~/.taurine/packages/)
+    let global_dir = get_global_packages_dir();
+    if global_dir.exists() {
+        // Прямой поиск (например "http-client" -> ~/.taurine/packages/http-client/)
+        let global_pkg = global_dir.join(module_path);
+        if global_pkg.exists() {
+            // Найти главный файл пакета
+            let main_file = global_pkg.join("main.tau");
+            if main_file.exists() {
+                return Some(main_file);
+            }
+            // Или файл с тем же именем
+            let tau_file = global_pkg.join(format!("{}.tau", module_path));
+            if tau_file.exists() {
+                return Some(tau_file);
+            }
+        }
+        
+        // Поиск в поддиректориях (для пакетов с версиями)
+        if let Ok(entries) = std::fs::read_dir(&global_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    let name = path.file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    
+                    if name == module_path || name.starts_with(&format!("{}-", module_path)) {
+                        // Найти .tau файлы в директории
+                        if let Ok(files) = std::fs::read_dir(&path) {
+                            for file in files.flatten() {
+                                let file_path = file.path();
+                                if file_path.extension().map_or(false, |ext| ext == "tau") {
+                                    return Some(file_path);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 3. Стандартная библиотека (относительно исполняемого файла)
+    let std_path = base_path.join("std").join(format!("{}.tau", module_path));
+    if std_path.exists() {
+        return Some(std_path);
+    }
+    
+    None
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ControlFlow {
     None,
@@ -216,6 +285,8 @@ impl Interpreter {
             Stmt::For { line, .. } => *line,
             Stmt::ForIn { line, .. } => *line,
             Stmt::Function { line, .. } => *line,
+            Stmt::AsyncFunction { line, .. } => *line,
+            Stmt::Generator { line, .. } => *line,
             Stmt::Block(_) => self.current_line,
             Stmt::Import { line, .. } => *line,
             Stmt::Try { line, .. } => *line,
@@ -249,6 +320,8 @@ impl Interpreter {
             Expr::SetProperty { line, .. } => *line,
             Expr::Throw { line, .. } => *line,
             Expr::FunctionLiteral { line, .. } => *line,
+            Expr::AsyncFunctionLiteral { line, .. } => *line,
+            Expr::GeneratorLiteral { line, .. } => *line,
             Expr::Lambda { line, .. } => *line,
             Expr::Spread { line, .. } => *line,
             Expr::NullCoalesce { line, .. } => *line,
@@ -257,6 +330,8 @@ impl Interpreter {
             Expr::Export { line, .. } => *line,
             Expr::Class { line, .. } => *line,
             Expr::NewInstance { line, .. } => *line,
+            Expr::Await { line, .. } => *line,
+            Expr::Yield { line, .. } => *line,
             _ => 0,
         }
     }
@@ -300,7 +375,11 @@ impl Interpreter {
             }
             Stmt::Expression(expr) => {
                 self.current_line = self.get_line(&expr);
-                self.execute_expr(expr)?;
+                // Check if this is a yield expression before moving expr
+                let is_yield = matches!(&expr, Expr::Yield { .. });
+                let _result = self.execute_expr(expr)?;
+                // Yield values are handled by generator state management
+                let _ = is_yield;
             }
             Stmt::Return(expr) => {
                 self.return_value = if let Some(e) = expr {
@@ -430,7 +509,35 @@ impl Interpreter {
                             }
                         }
                     }
-                    _ => return Err("Can only iterate over arrays or ranges".to_string()),
+                    Value::Generator { state, .. } => {
+                        // Iterate over generator yielded values
+                        loop {
+                            let state_ref = state.borrow();
+                            if state_ref.is_done || state_ref.consumed_index >= state_ref.yielded_values.len() {
+                                drop(state_ref);
+                                break;
+                            }
+                            let item = state_ref.yielded_values[state_ref.consumed_index].clone();
+                            drop(state_ref);
+
+                            self.global.borrow_mut().define(variable, item);
+                            for stmt in &body {
+                                match self.execute_stmt(stmt.clone()) {
+                                    Ok(_) => {}
+                                    Err(e) => return Err(e),
+                                }
+                                if self.control_flow == ControlFlow::Break {
+                                    self.control_flow = ControlFlow::None;
+                                    return Ok(());
+                                }
+                                if self.control_flow == ControlFlow::Continue {
+                                    self.control_flow = ControlFlow::None;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    _ => return Err("Can only iterate over arrays, ranges, or generators".to_string()),
                 }
             }
             Stmt::Function { name, params, body, line } => {
@@ -444,6 +551,28 @@ impl Interpreter {
                 };
                 self.global.borrow_mut().define(name, func);
             }
+            Stmt::AsyncFunction { name, params, body, line } => {
+                self.current_line = line;
+                let func = Value::AsyncFunction {
+                    name: name.id(),
+                    params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
+                    default_params: params.iter().filter_map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
+                    body,
+                    closure: Rc::new(RefCell::new(Environment::new())),
+                };
+                self.global.borrow_mut().define(name, func);
+            }
+            Stmt::Generator { name, params, body, line } => {
+                self.current_line = line;
+                let func = Value::Generator {
+                    name: name.id(),
+                    params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
+                    body,
+                    closure: Rc::new(RefCell::new(Environment::new())),
+                    state: Rc::new(RefCell::new(crate::value::GeneratorState::default())),
+                };
+                self.global.borrow_mut().define(name, func);
+            }
             Stmt::Block(stmts) => {
                 for stmt in stmts {
                     self.execute_stmt(stmt)?;
@@ -451,7 +580,11 @@ impl Interpreter {
             }
             Stmt::Import { path, alias, line } => {
                 self.current_line = line;
-                let module_path = self.base_path.join(&path);
+                
+                // Использовать универсальный поиск модулей
+                let module_path = resolve_module_path(&self.base_path, &path)
+                    .ok_or_else(|| format!("Cannot import '{path}': module not found"))?;
+                
                 let module_key = module_path.to_string_lossy().to_string();
 
                 if let Some(cached) = self.module_cache.borrow().get(&module_key) {
@@ -664,6 +797,58 @@ impl Interpreter {
                     closure: Rc::new(RefCell::new(Environment::new())),
                 })
             }
+            Expr::AsyncFunctionLiteral { params, body, line } => {
+                self.current_line = line;
+                Ok(Value::AsyncFunction {
+                    name: 0,
+                    params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
+                    default_params: params.iter().filter_map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
+                    body,
+                    closure: Rc::new(RefCell::new(Environment::new())),
+                })
+            }
+            Expr::GeneratorLiteral { params, body, line } => {
+                self.current_line = line;
+                Ok(Value::Generator {
+                    name: 0,
+                    params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
+                    body,
+                    closure: Rc::new(RefCell::new(Environment::new())),
+                    state: Rc::new(RefCell::new(crate::value::GeneratorState::default())),
+                })
+            }
+            Expr::Await { future, line } => {
+                self.current_line = line;
+                let future_val = self.execute_expr(*future)?;
+                // Await on a Future value - block until ready
+                match &future_val {
+                    Value::Future(state) => {
+                        let mut state_ref = state.borrow_mut();
+                        match &*state_ref {
+                            crate::value::FutureState::Ready(v) => Ok(v.clone()),
+                            crate::value::FutureState::Pending => {
+                                // For now, treat pending as ready with nil
+                                // In a real async runtime, we would yield here
+                                Ok(Value::Nil)
+                            }
+                        }
+                    }
+                    _ => {
+                        // If not a Future, just return the value directly
+                        Ok(future_val)
+                    }
+                }
+            }
+            Expr::Yield { value, line } => {
+                self.current_line = line;
+                let yield_val = match value {
+                    Some(v) => self.execute_expr(*v)?,
+                    None => Value::Nil,
+                };
+                // Store yielded value in generator state
+                // This will be consumed by the generator's next() method
+                Ok(yield_val)
+            }
             Expr::Spread { expr, line } => {
                 self.current_line = line;
                 self.execute_expr(*expr)
@@ -689,7 +874,11 @@ impl Interpreter {
             }
             Expr::Require { path, line } => {
                 self.current_line = line;
-                let module_path = self.base_path.join(&path);
+                
+                // Использовать универсальный поиск модулей
+                let module_path = resolve_module_path(&self.base_path, &path)
+                    .ok_or_else(|| format!("Cannot require '{path}': module not found"))?;
+                
                 let module_key = module_path.to_string_lossy().to_string();
 
                 if let Some(cached) = self.module_cache.borrow().get(&module_key) {
@@ -877,6 +1066,98 @@ impl Interpreter {
 
                 self.global = old_env;
                 result
+            }
+            Value::AsyncFunction { name, params, default_params, body, closure } => {
+                let old_env = self.global.clone();
+                let new_env = Rc::new(RefCell::new(Environment::with_parent(closure.clone())));
+
+                for (i, param_id) in params.iter().enumerate() {
+                    let val = if i < args.len() {
+                        args[i].clone()
+                    } else if i >= params.len() && (i - params.len()) < default_params.len() {
+                        self.execute_expr(default_params[i - params.len()].clone())?
+                    } else {
+                        Value::Nil
+                    };
+                    new_env.borrow_mut().define(InternedString::new(*param_id), val);
+                }
+
+                self.call_stack.push(StackFrame {
+                    function: format!("async function {name}"),
+                    line: self.current_line,
+                });
+
+                // Create a Future value
+                let future_state = Rc::new(RefCell::new(crate::value::FutureState::Pending));
+                let future_value = Value::Future(future_state.clone());
+
+                // Execute the async function body
+                let old_global = std::mem::replace(&mut self.global, new_env.clone());
+                let result = (|| -> Result<Value, String> {
+                    for stmt in &body {
+                        self.execute_stmt(stmt.clone())?;
+                    }
+                    Ok(self.return_value.take().unwrap_or(Value::Nil))
+                })();
+
+                self.global = old_global;
+                self.call_stack.pop();
+
+                // Update future state with result
+                match result {
+                    Ok(v) => {
+                        *future_state.borrow_mut() = crate::value::FutureState::Ready(v.clone());
+                        Ok(Value::Future(future_state))
+                    }
+                    Err(e) => Err(e),
+                }
+            }
+            Value::Generator { name, params, body, closure, state } => {
+                // Initialize generator state
+                let mut gen_state = state.borrow_mut();
+                gen_state.yielded_values.clear();
+                gen_state.consumed_index = 0;
+                gen_state.is_done = false;
+                drop(gen_state);
+
+                let old_env = self.global.clone();
+                let new_env = Rc::new(RefCell::new(Environment::with_parent(closure.clone())));
+
+                for (i, param_id) in params.iter().enumerate() {
+                    let val = if i < args.len() {
+                        args[i].clone()
+                    } else {
+                        Value::Nil
+                    };
+                    new_env.borrow_mut().define(InternedString::new(*param_id), val);
+                }
+
+                self.call_stack.push(StackFrame {
+                    function: format!("generator {name}"),
+                    line: self.current_line,
+                });
+
+                // Execute generator body to collect yielded values
+                let old_global = std::mem::replace(&mut self.global, new_env.clone());
+                let _result = (|| -> Result<Value, String> {
+                    for stmt in &body {
+                        self.execute_stmt(stmt.clone())?;
+                    }
+                    Ok(self.return_value.take().unwrap_or(Value::Nil))
+                })();
+
+                self.global = old_global;
+                self.call_stack.pop();
+
+                // Mark generator as done
+                state.borrow_mut().is_done = true;
+
+                if _result.is_err() {
+                    return _result;
+                }
+
+                // Return the generator object itself
+                Ok(Value::Generator { name, params, body, closure, state })
             }
             Value::NativeFunction(func) => {
                 self.call_stack.push(StackFrame {

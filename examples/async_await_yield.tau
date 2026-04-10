@@ -1,0 +1,161 @@
+// examples/async_await_yield.tau - Test async/await and generators
+
+// ============================================
+// Test 1: Async function
+// ============================================
+print("=== Test 1: Async function ===")
+
+async function fetchData(url) {
+    let data = "Data from " + url
+    return data
+}
+
+let result = fetchData("https://api.example.com")
+print(f"Async result: {result}")
+
+// ============================================
+// Test 2: Await expression
+// ============================================
+print("\n=== Test 2: Await expression ===")
+
+async function getNumber() {
+    return 42
+}
+
+let awaited = await getNumber()
+print(f"Awaited value: {awaited}")
+
+// ============================================
+// Test 3: Generator function
+// ============================================
+print("\n=== Test 3: Generator function ===")
+
+generator countUp(max) {
+    let i = 1
+    while i <= max {
+        yield i
+        i = i + 1
+    }
+}
+
+let counter = countUp(5)
+print(f"Generator created: {counter}")
+
+// ============================================
+// Test 4: Generator in for-in loop
+// ============================================
+print("\n=== Test 4: Generator in for-in ===")
+
+generator fibonacci(n) {
+    let a = 0
+    let b = 1
+    let i = 0
+    while i < n {
+        yield a
+        let temp = a + b
+        a = b
+        b = temp
+        i = i + 1
+    }
+}
+
+print("Fibonacci sequence:")
+for num in fibonacci(8) {
+    print(f"  {num}")
+}
+
+// ============================================
+// Test 5: Generator with yield
+// ============================================
+print("\n=== Test 5: Generator with expressions ===")
+
+generator squares(n) {
+    let i = 1
+    while i <= n {
+        yield i * i
+        i = i + 1
+    }
+}
+
+print("Squares:")
+for s in squares(5) {
+    print(f"  {s}")
+}
+
+// ============================================
+// Test 6: Async function with parameters
+// ============================================
+print("\n=== Test 6: Async with parameters ===")
+
+async function add(a, b) {
+    return a + b
+}
+
+let sum = await add(10, 20)
+print(f"Async add: {sum}")
+
+// ============================================
+// Test 7: Multiple awaits
+// ============================================
+print("\n=== Test 7: Multiple awaits ===")
+
+async function double(x) {
+    return x * 2
+}
+
+async function triple(x) {
+    return x * 3
+}
+
+let d = await double(5)
+let t = await triple(5)
+print(f"Double: {d}, Triple: {t}")
+
+// ============================================
+// Test 8: Nested async calls
+// ============================================
+print("\n=== Test 8: Nested async calls ===")
+
+async function inner(x) {
+    return x * 10
+}
+
+async function outer(x) {
+    let innerResult = await inner(x)
+    return innerResult + 1
+}
+
+let nested = await outer(3)
+print(f"Nested async: {nested}")
+
+// ============================================
+// Test 9: Generator with conditionals
+// ============================================
+print("\n=== Test 9: Generator with conditionals ===")
+
+generator evenNumbers(max) {
+    let i = 2
+    while i <= max {
+        yield i
+        i = i + 2
+    }
+}
+
+print("Even numbers up to 10:")
+for n in evenNumbers(10) {
+    print(f"  {n}")
+}
+
+// ============================================
+// Test 10: Async lambda (if supported)
+// ============================================
+print("\n=== Test 10: Async lambda ===")
+
+let asyncDouble = x => x * 2
+let lambdaResult = asyncDouble(21)
+print(f"Async lambda: {lambdaResult}")
+
+// ============================================
+// Summary
+// ============================================
+print("\n=== All tests completed! ===")

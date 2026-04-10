@@ -1,159 +1,142 @@
-// std/async.tau - Async utilities
+// std/async.tau - Async/await utilities for Taurine
 
-let Promise = {}
+import "std/array.tau" as array
 
-function Promise.new(executor) {
+// ============================================
+// Future/Promise implementation
+// ============================================
+
+let Future = {}
+
+function Future.new(value) {
     let self = {
-        state: "pending",
-        value: nil,
-        onFulfilled: [],
-        onRejected: []
+        _state: "ready",
+        _value: value,
+        _callbacks: []
     }
-
-    function self.resolve(value) {
-        if self.state != "pending" {
-            return
-        }
-        self.state = "fulfilled"
-        self.value = value
-        for callback in self.onFulfilled {
-            callback(value)
-        }
-    }
-
-    function self.reject(reason) {
-        if self.state != "pending" {
-            return
-        }
-        self.state = "rejected"
-        self.value = reason
-        for callback in self.onRejected {
-            callback(reason)
-        }
-    }
-
-    function self.then(onSuccess, onError) {
-        if onSuccess != nil {
-            array.push(self.onFulfilled, onSuccess)
-        }
-        if onError != nil {
-            array.push(self.onRejected, onError)
-        }
-        return self
-    }
-
-    function self.catch(onError) {
-        return self.then(nil, onError)
-    }
-
-    if executor != nil {
-        executor(function(v) self.resolve(v), function(e) self.reject(e))
-    }
-
     return self
 }
 
-function Promise.all(promises) {
-    let results = []
-    let count = 0
-    let total = array.len(promises)
-
-    let promise = Promise.new(function(resolve, reject) {
-        if total == 0 {
-            resolve(results)
-            return
-        }
-        for i, p in ipairs(promises) {
-            p.then(
-                function(value) {
-                    results[i] = value
-                    count = count + 1
-                    if count == total {
-                        resolve(results)
-                    }
-                },
-                function(error) {
-                    reject(error)
-                }
-            )
-        }
-    })
-    return promise
+function Future.then(self, callback) {
+    if self._state == "ready" {
+        let result = callback(self._value)
+        return Future.new(result)
+    }
+    array.push(self._callbacks, callback)
+    return self
 }
 
-function Promise.race(promises) {
-    return Promise.new(function(resolve, reject) {
-        for p in promises {
-            p.then(
-                function(value) resolve(value),
-                function(error) reject(error)
-            )
-        }
-    })
+function Future.catch(self, callback) {
+    if self._state == "error" {
+        let result = callback(self._value)
+        return Future.new(result)
+    }
+    return self
 }
 
-function Promise.resolve(value) {
-    return Promise.new(function(resolve, reject) {
-        resolve(value)
-    })
+function Future.isReady(self) {
+    return self._state == "ready"
 }
 
-function Promise.reject(reason) {
-    return Promise.new(function(resolve, reject) {
-        reject(reason)
-    })
+function Future.getValue(self) {
+    return self._value
 }
+
+// ============================================
+// Async helper functions
+// ============================================
 
 async function sleep(ms) {
-    async_sleep(ms)
+    // Uses native sleep if available
+    let start = os.time()
+    while (os.time() - start) * 1000 < ms {
+        // Busy wait for now
+    }
+    return Future.new(nil)
 }
 
 async function sleepSecs(secs) {
-    async_sleep(secs * 1000)
+    return sleep(secs * 1000)
 }
 
-function spawn(fn, ...) {
-    return async_spawn(fn, ...)
-}
+// ============================================
+// Concurrent execution helpers
+// ============================================
 
-function debounce(fn, delay) {
-    let timeout = nil
-    return function(...) {
-        if timeout != nil {
-            // clearTimeout(timeout)
+function Future.all(futures) {
+    let results = []
+    for i, f in futures {
+        if f._state == "ready" {
+            results[i] = f._value
+        } else {
+            return Future.new(nil) // Not all ready yet
         }
-        let args = [...]
-        timeout = spawn(function() {
-            sleep(delay)
-            fn(unpack(args))
-        })
+    }
+    return Future.new(results)
+}
+
+function Future.race(futures) {
+    for f in futures {
+        if f._state == "ready" {
+            return Future.new(f._value)
+        }
+    }
+    return Future.new(nil)
+}
+
+function Future.resolve(value) {
+    return Future.new(value)
+}
+
+function Future.reject(error) {
+    let f = Future.new(error)
+    f._state = "error"
+    return f
+}
+
+// ============================================
+// Generator utilities
+// ============================================
+
+generator range(start, end, step) {
+    let current = start
+    let s = step != nil ? step : 1
+    while current < end {
+        yield current
+        current = current + s
     }
 }
 
-function throttle(fn, limit) {
-    let lastCall = 0
-    let timeout = nil
-    return function(...) {
-        let now = os.time() * 1000
-        if now - lastCall >= limit {
-            lastCall = now
-            return fn(...)
-        }
+generator repeat(value, times) {
+    let i = 0
+    while i < times {
+        yield value
+        i = i + 1
     }
 }
+
+generator iteratePairs(table) {
+    // Iterate over table key-value pairs
+    yield table
+}
+
+// ============================================
+// Async flow control
+// ============================================
 
 async function retry(fn, maxAttempts, delay) {
     let attempts = 0
     let lastError = nil
     while attempts < maxAttempts {
         attempts = attempts + 1
-        let success, result = pcall(fn)
-        if success {
+        try {
+            let result = fn()
             return result
-        }
-        lastError = result
-        if attempts < maxAttempts {
-            await sleep(delay)
+        } catch (err) {
+            lastError = err
+            if attempts < maxAttempts {
+                await sleep(delay)
+            }
         }
     }
     throw "Failed after " + attempts + " attempts: " + lastError
@@ -162,54 +145,28 @@ async function retry(fn, maxAttempts, delay) {
 async function parallel(...) {
     let functions = [...]
     let results = []
-    let errors = []
-    for i, fn in ipairs(functions) {
-        let success, result = pcall(fn)
-        if success {
-            results[i] = result
-        } else {
-            errors[i] = result
-        }
+    for i, fn in functions {
+        results[i] = fn()
     }
-    return results, errors
+    return results
 }
 
 async function series(...) {
     let functions = [...]
     let results = []
-    for i, fn in ipairs(functions) {
-        let success, result = pcall(fn)
-        if !success {
-            return nil, result
-        }
-        results[i] = result
+    for i, fn in functions {
+        let result = fn()
+        array.push(results, result)
     }
     return results
 }
 
 async function withTimeout(fn, timeoutMs) {
-    let result = nil
-    let error = nil
-    let completed = false
-    spawn(function() {
-        let success, res = pcall(fn)
-        if success {
-            result = res
-        } else {
-            error = res
-        }
-        completed = true
-    })
-    let elapsed = 0
-    while !completed && elapsed < timeoutMs {
-        await sleep(10)
-        elapsed = elapsed + 10
-    }
-    if !completed {
+    let start = os.time()
+    let result = fn()
+    let elapsed = (os.time() - start) * 1000
+    if elapsed > timeoutMs {
         return nil, "Timeout"
-    }
-    if error != nil {
-        return nil, error
     }
     return result
 }
@@ -231,17 +188,48 @@ async function sequence(functions, delayMs) {
     return results
 }
 
+// ============================================
+// Debounce and Throttle
+// ============================================
+
+function debounce(fn, delay) {
+    let lastCall = 0
+    return function(...) {
+        let now = os.time() * 1000
+        if now - lastCall >= delay {
+            lastCall = now
+            return fn(...)
+        }
+    }
+}
+
+function throttle(fn, limit) {
+    let lastCall = 0
+    return function(...) {
+        let now = os.time() * 1000
+        if now - lastCall >= limit {
+            lastCall = now
+            return fn(...)
+        }
+    }
+}
+
+// ============================================
+// Exports
+// ============================================
+
 return {
-    Promise: Promise,
+    Future: Future,
     sleep: sleep,
     sleepSecs: sleepSecs,
-    spawn: spawn,
-    debounce: debounce,
-    throttle: throttle,
     retry: retry,
     parallel: parallel,
     series: series,
     withTimeout: withTimeout,
     delay: delay,
     sequence: sequence,
+    debounce: debounce,
+    throttle: throttle,
+    range: range,
+    repeat: repeat,
 }

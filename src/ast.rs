@@ -78,6 +78,16 @@ pub enum Expr {
         body: Vec<Stmt>,
         line: usize,
     },
+    AsyncFunctionLiteral {
+        params: Vec<(InternedString, Option<Expr>)>,
+        body: Vec<Stmt>,
+        line: usize,
+    },
+    GeneratorLiteral {
+        params: Vec<(InternedString, Option<Expr>)>,
+        body: Vec<Stmt>,
+        line: usize,
+    },
     Lambda {
         params: Vec<(InternedString, Option<Expr>)>,
         body: Box<Expr>,
@@ -130,6 +140,16 @@ pub enum Expr {
     },
     Set {
         items: Vec<Expr>,
+        line: usize,
+    },
+    // Async/Await
+    Await {
+        future: Box<Expr>,
+        line: usize,
+    },
+    // Generator yield
+    Yield {
+        value: Option<Box<Expr>>,
         line: usize,
     },
 }
@@ -230,6 +250,20 @@ pub enum Stmt {
     Export {
         name: InternedString,
         value: Expr,
+        line: usize,
+    },
+    // Async function declaration
+    AsyncFunction {
+        name: InternedString,
+        params: Vec<(InternedString, Option<Expr>)>,
+        body: Vec<Stmt>,
+        line: usize,
+    },
+    // Generator function declaration
+    Generator {
+        name: InternedString,
+        params: Vec<(InternedString, Option<Expr>)>,
+        body: Vec<Stmt>,
         line: usize,
     },
 }

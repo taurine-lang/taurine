@@ -3,7 +3,7 @@ use logos::Logos;
 #[derive(Logos, Debug, PartialEq, Clone)]
 #[logos(error = ())]
 pub enum TokenKind {
-    // Ключевые слова
+    // Keywords
     #[token("let")]
     Let,
     #[token("const")]
@@ -45,7 +45,7 @@ pub enum TokenKind {
     #[token("continue")]
     Continue,
     
-    // Классы и ООП
+    // Classes and OOP
     #[token("class")]
     Class,
     #[token("extends")]
@@ -57,7 +57,7 @@ pub enum TokenKind {
     #[token("new")]
     New,
     
-    // Модули
+    // Modules
     #[token("export")]
     Export,
     #[token("require")]
@@ -66,8 +66,18 @@ pub enum TokenKind {
     // Pattern matching
     #[token("match")]
     Match,
-    
-    // Литералы и идентификаторы
+
+    // Async/Await
+    #[token("async")]
+    Async,
+    #[token("await")]
+    Await,
+
+    // Generators
+    #[token("yield")]
+    Yield,
+
+    // Literals and identifiers
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", priority = 3)]
     Identifier,
     #[regex(r"[0-9]+(\.[0-9]+)?")]
@@ -77,7 +87,7 @@ pub enum TokenKind {
     #[regex(r#"f"([^"\\]|\\.)*""#)]
     FString,
 
-    // Операторы
+    // Operators
     #[token("=")]
     Equal,
     #[token("+")]
@@ -121,7 +131,7 @@ pub enum TokenKind {
     #[token("...")]
     DotDotDot,
 
-    // Скобки и разделители
+   // Brackets and separators
     #[token("(")]
     LParen,
     #[token(")")]
@@ -146,7 +156,7 @@ pub enum TokenKind {
     #[token("_")]
     Underscore,
 
-    // Комментарии
+    // Comments
     #[regex(r"//[^\n]*")]
     Comment,
     #[regex(r"[ \t\n\f\r]+")]
@@ -454,5 +464,21 @@ mod tests {
         let tokens = tokenize("...args");
         assert_eq!(tokens[0].kind, TokenKind::DotDotDot);
         assert_eq!(tokens[1].kind, TokenKind::Identifier);
+    }
+
+    #[test]
+    fn test_tokenize_async_keywords() {
+        let tokens = tokenize("async await yield");
+        assert_eq!(tokens[0].kind, TokenKind::Async);
+        assert_eq!(tokens[1].kind, TokenKind::Await);
+        assert_eq!(tokens[2].kind, TokenKind::Yield);
+    }
+
+    #[test]
+    fn test_tokenize_async_function() {
+        let tokens = tokenize("async function fetch() { await promise }");
+        assert_eq!(tokens[0].kind, TokenKind::Async);
+        assert_eq!(tokens[1].kind, TokenKind::Function);
+        assert_eq!(tokens[6].kind, TokenKind::Await);
     }
 }
