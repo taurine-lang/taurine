@@ -1,8 +1,8 @@
 [package]
 name = "taurine"
-version = "2.0.0"
+version = "2.0.1"
 edition = "2021"
-authors = ["ffsonDev", "Astrum"]
+authors = ["ffsonDev"]
 description = "Fast, embeddable scripting language implemented in Rust"
 license = "MIT"
 repository = "https://github.com/ffsonDev/taurine"
