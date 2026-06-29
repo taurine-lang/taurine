@@ -36,9 +36,6 @@ impl Formatter {
         "    ".repeat(self.indent)
     }
 
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
 
     fn writeln(&mut self, s: &str) {
         self.output.push_str(&self.indent_str());

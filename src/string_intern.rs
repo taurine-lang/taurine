@@ -114,7 +114,27 @@ impl StringInterner {
         self.strings.reserve(additional);
         self.string_to_id.reserve(additional);
     }
+
+    #[inline]
+    pub fn intern_with_id(&mut self, s: &str, id: usize) {
+        // Ensure the vector is large enough
+        while self.strings.len() <= id {
+            let placeholder_id = self.strings.len();
+            let placeholder: Arc<str> = format!("__placeholder_{}", placeholder_id).into();
+            self.string_to_id.insert(placeholder.clone(), placeholder_id);
+            self.strings.push(placeholder);
+        }
+        
+        // Replace the placeholder at the given ID
+        let arc_str: Arc<str> = s.into();
+        if let Some(old_str) = self.strings.get(id) {
+            self.string_to_id.remove(old_str.as_ref());
+        }
+        self.string_to_id.insert(arc_str.clone(), id);
+        self.strings[id] = arc_str;
+    }
 }
+
 
 impl Default for StringInterner {
     fn default() -> Self {

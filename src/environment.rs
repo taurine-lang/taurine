@@ -11,8 +11,6 @@ pub struct Environment {
     pub values: Rc<RefCell<HashMap<usize, Value>>>,
     parent: Option<Rc<RefCell<Environment>>>,
     constants: Rc<RefCell<HashMap<usize, ()>>>,
-    /// Reverse lookup map for FFI - maps string names to IDs
-    name_to_id: Rc<RefCell<HashMap<String, usize>>>,
 }
 
 impl Environment {
@@ -21,7 +19,6 @@ impl Environment {
             values: Rc::new(RefCell::new(HashMap::new())),
             parent: None,
             constants: Rc::new(RefCell::new(HashMap::new())),
-            name_to_id: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
@@ -30,7 +27,6 @@ impl Environment {
             values: Rc::new(RefCell::new(HashMap::new())),
             parent: Some(parent),
             constants: Rc::new(RefCell::new(HashMap::new())),
-            name_to_id: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 

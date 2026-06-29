@@ -3,16 +3,80 @@ use std::path::PathBuf;
 use std::io::{self, Write};
 use std::time::Instant;
 use clap::Parser;
-use taurine::lexer::tokenize;
+use taurine::lexer::tokenize_with_interner;
+use taurine::string_intern::StringInterner;
 use taurine::parser::Parser as TaurineParser;
 use taurine::interpreter::Interpreter;
 use taurine::optimizer::Optimizer;
 use taurine::formatter::Formatter;
 
+fn create_interner_with_builtins() -> StringInterner {
+    let mut interner = StringInterner::new();
+    
+    // Pre-populate with built-in function names at their expected IDs
+    // These IDs must match the ones used in native_functions.rs
+    interner.intern_with_id("print", 1);
+    interner.intern_with_id("assert", 2);
+    interner.intern_with_id("assert_eq", 3);
+    interner.intern_with_id("type", 4);
+    interner.intern_with_id("tonumber", 5);
+    interner.intern_with_id("tostring", 6);
+    interner.intern_with_id("io_read", 10);
+    interner.intern_with_id("io_write", 11);
+    interner.intern_with_id("io_append", 12);
+    interner.intern_with_id("io_exists", 13);
+    interner.intern_with_id("io_remove", 14);
+    interner.intern_with_id("io_mkdir", 15);
+    interner.intern_with_id("io_platform", 16);
+    interner.intern_with_id("io_arch", 17);
+    interner.intern_with_id("io_cwd", 18);
+    interner.intern_with_id("io_exit", 19);
+    interner.intern_with_id("io_sleep", 20);
+    interner.intern_with_id("io_time", 21);
+    interner.intern_with_id("str_upper", 30);
+    interner.intern_with_id("str_lower", 31);
+    interner.intern_with_id("str_trim", 32);
+    interner.intern_with_id("str_substr", 33);
+    interner.intern_with_id("str_find", 34);
+    interner.intern_with_id("str_replace", 35);
+    interner.intern_with_id("str_replace_all", 36);
+    interner.intern_with_id("str_split", 37);
+    interner.intern_with_id("char", 38);
+    interner.intern_with_id("byte", 39);
+    interner.intern_with_id("io_arraypush", 40);
+    interner.intern_with_id("io_arraypop", 41);
+    interner.intern_with_id("io_arraylen", 42);
+    interner.intern_with_id("io_arrayget", 43);
+    interner.intern_with_id("io_arrayset", 44);
+    interner.intern_with_id("io_arrayconcat", 45);
+    interner.intern_with_id("io_arrayreverse", 46);
+    interner.intern_with_id("io_arrayclear", 47);
+    interner.intern_with_id("json_parse", 50);
+    interner.intern_with_id("json_stringify", 51);
+    interner.intern_with_id("http_get", 60);
+    interner.intern_with_id("http_post", 61);
+    interner.intern_with_id("http_put", 62);
+    interner.intern_with_id("http_delete", 63);
+    interner.intern_with_id("crypto_md5", 70);
+    interner.intern_with_id("crypto_sha256", 71);
+    interner.intern_with_id("crypto_base64_encode", 72);
+    interner.intern_with_id("crypto_base64_decode", 73);
+    interner.intern_with_id("crypto_uuid", 74);
+    interner.intern_with_id("crypto_random_bytes", 75);
+    interner.intern_with_id("date_now", 80);
+    interner.intern_with_id("date_format", 81);
+    interner.intern_with_id("regex_match", 90);
+    interner.intern_with_id("regex_find", 91);
+    interner.intern_with_id("regex_replace", 92);
+    interner.intern_with_id("regex_find_all", 93);
+    
+    interner
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "taurine")]
 #[command(about = "Taurine Programming Language v2.0", long_about = None)]
-#[command(version = "2.0.0")]
+#[command(version = "2.12.0")]
 struct Args {
     file: Option<String>,
     #[arg(short, long, default_value_t = false)]
@@ -72,7 +136,8 @@ fn run_repl() {
     println!("Taurine v2.0 REPL");
     println!("Type 'exit' or 'quit' to exit\n");
 
-    let mut interpreter = Interpreter::new(PathBuf::from("."));
+    let interner = create_interner_with_builtins();
+    let mut interpreter = Interpreter::with_interner(PathBuf::from("."), interner.clone());
     let mut input = String::new();
 
     loop {
@@ -102,8 +167,9 @@ fn run_repl() {
             continue;
         }
 
-        let tokens = tokenize(input);
-        let mut parser = TaurineParser::new(tokens);
+        let mut interner = create_interner_with_builtins();
+        let tokens = tokenize_with_interner(input, &mut interner);
+        let mut parser = TaurineParser::with_interner(tokens, interner);
 
         match parser.parse() {
             Ok(program) => {
@@ -141,7 +207,8 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
     }
 
     let lex_start = Instant::now();
-    let tokens = tokenize(source);
+    let mut interner = create_interner_with_builtins();
+    let tokens = tokenize_with_interner(source, &mut interner);
     let lex_time = lex_start.elapsed();
 
     if debug {
@@ -153,7 +220,7 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
     }
 
     let parse_start = Instant::now();
-    let mut parser = TaurineParser::new(tokens);
+    let mut parser = TaurineParser::with_interner(tokens, interner.clone());
     let mut program = match parser.parse() {
         Ok(p) => p,
         Err(e) => {
@@ -161,8 +228,8 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
             std::process::exit(1);
         }
     };
+    // Get the updated interner from parser
     let parse_time = parse_start.elapsed();
-
     if debug {
         println!("AST (before optimization):\n{program:#?}\n");
     }
@@ -187,7 +254,8 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
     }
 
     let exec_start = Instant::now();
-    let mut interpreter = Interpreter::new(base_path);
+    let interner = parser.take_interner().unwrap_or_else(create_interner_with_builtins);
+    let mut interpreter = Interpreter::with_interner(base_path, interner);
     if optimize {
         interpreter.optimize();
     }
@@ -220,8 +288,9 @@ fn format_file(args: Args) {
         }
     };
     
-    let tokens = tokenize(&source);
-    let mut parser = TaurineParser::new(tokens);
+    let mut interner = create_interner_with_builtins();
+    let tokens = tokenize_with_interner(&source, &mut interner);
+    let mut parser = TaurineParser::with_interner(tokens, interner);
     let program = match parser.parse() {
         Ok(p) => p,
         Err(e) => {

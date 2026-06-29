@@ -107,20 +107,33 @@ pub struct Interpreter {
     /// Optional garbage collector for memory management
     gc: Option<GarbageCollector>,
     /// Memory tracking for GC
-    memory_used: usize,
+    /// String interner for consistent identifier IDs
+    interner: crate::string_intern::StringInterner,
 }
 
 impl Interpreter {
     pub fn new(base_path: PathBuf) -> Self {
-        Self::with_limits(base_path, SafetyLimits::default())
+        Self::with_interner(base_path, crate::string_intern::StringInterner::new())
+    }
+
+    pub fn with_interner(base_path: PathBuf, interner: crate::string_intern::StringInterner) -> Self {
+        Self::with_limits_and_interner(base_path, SafetyLimits::default(), interner)
     }
 
     pub fn with_limits(base_path: PathBuf, limits: SafetyLimits) -> Self {
-        Self::with_gc(base_path, limits, None)
+        Self::with_limits_and_interner(base_path, limits, crate::string_intern::StringInterner::new())
     }
 
-    /// Create interpreter with garbage collector
+    pub fn with_limits_and_interner(base_path: PathBuf, limits: SafetyLimits, interner: crate::string_intern::StringInterner) -> Self {
+        Self::with_gc_and_interner(base_path, limits, None, interner)
+    }
+
+        /// Create interpreter with garbage collector
     pub fn with_gc(base_path: PathBuf, limits: SafetyLimits, gc_config: Option<GcConfig>) -> Self {
+        Self::with_gc_and_interner(base_path, limits, gc_config, crate::string_intern::StringInterner::new())
+    }
+
+    pub fn with_gc_and_interner(base_path: PathBuf, limits: SafetyLimits, gc_config: Option<GcConfig>, interner: crate::string_intern::StringInterner) -> Self {
         let global = Rc::new(RefCell::new(crate::environment::Environment::new()));
         let safety = SafetyContext::new(limits);
         let gc = gc_config.map(GarbageCollector::new);
@@ -132,9 +145,9 @@ impl Interpreter {
             current_line: 1,
             control_flow: ControlFlow::None,
             safety,
+            interner,
             module_cache: Rc::new(RefCell::new(std::collections::HashMap::new())),
             gc,
-            memory_used: 0,
         };
         register_builtins(&interp.global);
         interp
@@ -184,12 +197,6 @@ impl Interpreter {
     }
 
     /// Record memory allocation for GC tracking
-    fn record_allocation(&mut self, bytes: usize) {
-        self.memory_used += bytes;
-        if let Some(ref mut gc) = self.gc {
-            gc.allocate(bytes);
-        }
-    }
 
     pub fn interrupt(&self) {
         self.safety.interrupt();
@@ -272,31 +279,6 @@ impl Interpreter {
         msg
     }
 
-    fn get_stmt_line(&self, stmt: &Stmt) -> usize {
-        match stmt {
-            Stmt::Declaration { line, .. } => *line,
-            Stmt::Destructure { line, .. } => *line,
-            Stmt::Assignment { line, .. } => *line,
-            Stmt::Expression(expr) => self.get_line(expr),
-            Stmt::Return(_) => self.current_line,
-            Stmt::ReturnMulti(_) => self.current_line,
-            Stmt::If { line, .. } => *line,
-            Stmt::While { line, .. } => *line,
-            Stmt::For { line, .. } => *line,
-            Stmt::ForIn { line, .. } => *line,
-            Stmt::Function { line, .. } => *line,
-            Stmt::AsyncFunction { line, .. } => *line,
-            Stmt::Generator { line, .. } => *line,
-            Stmt::Block(_) => self.current_line,
-            Stmt::Import { line, .. } => *line,
-            Stmt::Try { line, .. } => *line,
-            Stmt::Class { line, .. } => *line,
-            Stmt::Export { line, .. } => *line,
-            Stmt::Break => self.current_line,
-            Stmt::Continue => self.current_line,
-            _ => self.current_line,
-        }
-    }
 
     fn get_line(&self, expr: &Expr) -> usize {
         match expr {
@@ -390,11 +372,11 @@ impl Interpreter {
                 return Ok(());
             }
             Stmt::ReturnMulti(values) => {
-                if let Some(first) = values.into_iter().next() {
-                    self.return_value = Some(self.execute_expr(first)?);
-                } else {
-                    self.return_value = Some(Value::Nil);
+                let mut result_values = Vec::new();
+                for expr in values {
+                    result_values.push(self.execute_expr(expr)?);
                 }
+                self.return_value = Some(Value::Array(std::rc::Rc::new(std::cell::RefCell::new(result_values.into()))));
                 return Ok(());
             }
             Stmt::If { condition, then_branch, else_branch, line } => {
@@ -545,9 +527,9 @@ impl Interpreter {
                 let func = Value::Function {
                     name: name.id(),
                     params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
-                    default_params: params.iter().filter_map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
+                    default_params: params.iter().map(|(_, d)| d.clone()).collect(),
                     body,
-                    closure: Rc::new(RefCell::new(Environment::new())),
+                    closure: self.global.clone(),
                 };
                 self.global.borrow_mut().define(name, func);
             }
@@ -556,7 +538,7 @@ impl Interpreter {
                 let func = Value::AsyncFunction {
                     name: name.id(),
                     params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
-                    default_params: params.iter().filter_map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
+                    default_params: params.iter().map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
                     body,
                     closure: Rc::new(RefCell::new(Environment::new())),
                 };
@@ -642,7 +624,7 @@ impl Interpreter {
                         let method = Value::Function {
                             name: method_name.id(),
                             params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
-                            default_params: params.iter().filter_map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
+                            default_params: params.iter().map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
                             body,
                             closure: Rc::new(RefCell::new(Environment::new())),
                         };
@@ -692,15 +674,36 @@ impl Interpreter {
                 let val = self.execute_expr(*expr)?;
                 self.evaluate_unary(val, op)
             }
-            Expr::Call { callee, arguments, line } => {
-                self.current_line = line;
-                let func = self.execute_expr(*callee)?;
-                let args: Result<Vec<Value>, String> = arguments
-                    .into_iter()
-                    .map(|arg| self.execute_expr(arg))
-                    .collect();
-                self.call_function(func, args?)
+            Expr::Call { callee, arguments , line } => {
+            self.current_line = line;
+            
+            // Intercept json_parse (50) and json_stringify (51)
+            if let Expr::Identifier(name) = &*callee {
+                if name.id() == 50 {
+                    let args: Result<Vec<Value>, String> = arguments.into_iter().map(|arg| self.execute_expr(arg)).collect();
+                    let args = args?;
+                    if args.is_empty() { return Err("json_parse() requires 1 argument".to_string()); }
+                    if let Value::String(s) = &args[0] {
+                        return self.json_parse(s);
+                    } else {
+                        return Err("json_parse() requires string".to_string());
+                    }
+                } else if name.id() == 51 {
+                    let args: Result<Vec<Value>, String> = arguments.into_iter().map(|arg| self.execute_expr(arg)).collect();
+                    let args = args?;
+                    if args.is_empty() { return Err("json_stringify() requires 1 argument".to_string()); }
+                    let json = self.json_stringify(&args[0])?;
+                    return Ok(Value::String(json));
+                }
             }
+
+            let func = self.execute_expr(*callee)?;
+            let args: Result <Vec <Value >, String > = arguments
+                .into_iter()
+                .map(|arg| self.execute_expr(arg))
+                .collect();
+            self.call_function(func, args?)
+        }
             Expr::Table { entries, line } => {
                 self.current_line = line;
                 let mut table: HashMap<usize, Value> = HashMap::new();
@@ -782,7 +785,7 @@ impl Interpreter {
                 Ok(Value::Function {
                     name: 0,
                     params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
-                    default_params: params.iter().filter_map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
+                    default_params: params.iter().map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
                     body,
                     closure: Rc::new(RefCell::new(Environment::new())),
                 })
@@ -793,8 +796,8 @@ impl Interpreter {
                     name: 0,
                     params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
                     default_params: vec![],
-                    body: vec![Stmt::Expression(*body)],
-                    closure: Rc::new(RefCell::new(Environment::new())),
+                    body: vec![Stmt::Return(Some(*body))],
+                    closure: self.global.clone(),
                 })
             }
             Expr::AsyncFunctionLiteral { params, body, line } => {
@@ -802,7 +805,7 @@ impl Interpreter {
                 Ok(Value::AsyncFunction {
                     name: 0,
                     params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
-                    default_params: params.iter().filter_map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
+                    default_params: params.iter().map(|(_, d)| d.clone()).collect(),
                     body,
                     closure: Rc::new(RefCell::new(Environment::new())),
                 })
@@ -823,7 +826,7 @@ impl Interpreter {
                 // Await on a Future value - block until ready
                 match &future_val {
                     Value::Future(state) => {
-                        let mut state_ref = state.borrow_mut();
+                        let state_ref = state.borrow_mut();
                         match &*state_ref {
                             crate::value::FutureState::Ready(v) => Ok(v.clone()),
                             crate::value::FutureState::Pending => {
@@ -887,15 +890,29 @@ impl Interpreter {
 
                 let source = std::fs::read_to_string(&module_path)
                     .map_err(|e| format!("Cannot require '{path}': {e}"))?;
-
-                let tokens = lexer::tokenize(&source);
-                let mut parser = crate::parser::Parser::new(tokens);
+                let mut interner = self.interner.clone();
+                let tokens = lexer::tokenize_with_interner(&source, &mut interner);
+                let mut parser = crate::parser::Parser::with_interner(tokens, interner.clone());
                 let program = parser.parse()?;
+                
+                // Update main interner with new strings from module
+                self.interner = parser.take_interner().unwrap_or(interner);
 
-                let mut sub_interp = Interpreter::new(self.base_path.clone());
+                let mut sub_interp = Interpreter::with_interner(self.base_path.clone(), self.interner.clone());
                 sub_interp.interpret(program)?;
 
+                let module_values = sub_interp.global.borrow().values.borrow().clone();
                 let module_table = Value::new_table();
+                
+                // Extract the HashMap from the table
+                if let Value::Table(ref t) = module_table {
+                    let mut table_ref = t.borrow_mut();
+                    for (id, value) in module_values {
+                        self.global.borrow_mut().define(InternedString::new(id), value.clone());
+                        table_ref.insert(id, value);
+                    }
+                }
+                
                 self.module_cache.borrow_mut().insert(module_key, module_table.clone());
                 Ok(module_table)
             }
@@ -914,7 +931,7 @@ impl Interpreter {
                         let method = Value::Function {
                             name: method_name.id(),
                             params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
-                            default_params: params.iter().filter_map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
+                            default_params: params.iter().map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
                             body,
                             closure: Rc::new(RefCell::new(Environment::new())),
                         };
@@ -987,6 +1004,12 @@ impl Interpreter {
                 }
                 _ => Err("Invalid operands for /".to_string()),
             },
+            TokenKind::Percent => match (left, right) {
+                (Value::Number(l), Value::Number(r)) => {
+                    if r == 0.0 { Err("Modulo by zero".to_string()) } else { Ok(Value::Number(l % r)) }
+                }
+                _ => Err("Invalid operands for %".to_string()),
+            },
             TokenKind::EqualEqual => Ok(Value::Bool(left == right)),
             TokenKind::NotEqual => Ok(Value::Bool(left != right)),
             TokenKind::Less => match (left, right) {
@@ -1030,18 +1053,27 @@ impl Interpreter {
     fn call_function(&mut self, func: Value, args: Vec<Value>) -> Result<Value, String> {
         match func {
             Value::Function { name, params, default_params, body, closure } => {
-                let old_env = self.global.clone();
                 let new_env = Rc::new(RefCell::new(Environment::with_parent(closure.clone())));
 
+                let mut param_values = Vec::new();
                 for (i, param_id) in params.iter().enumerate() {
                     let val = if i < args.len() {
                         args[i].clone()
-                    } else if i >= params.len() && (i - params.len()) < default_params.len() {
-                        self.execute_expr(default_params[i - params.len()].clone())?
+                    } else if i < default_params.len() {
+                        if let Some(default_expr) = &default_params[i] {
+                            self.execute_expr(default_expr.clone())?
+                        } else {
+                            Value::Nil
+                        }
                     } else {
                         Value::Nil
                     };
-                    new_env.borrow_mut().define(InternedString::new(*param_id), val);
+                    param_values.push((*param_id, val));
+                }
+
+                for (param_id, val) in param_values {
+                    
+                    new_env.borrow_mut().define(InternedString::new(param_id), val);
                 }
 
                 self.call_stack.push(StackFrame {
@@ -1052,7 +1084,8 @@ impl Interpreter {
                 let old_global = std::mem::replace(&mut self.global, new_env.clone());
                 let result = (|| -> Result<Value, String> {
                     for stmt in &body {
-                        self.execute_stmt(stmt.clone())?;
+                    self.execute_stmt(stmt.clone())?;
+                    if self.return_value.is_some() { break; }
                     }
                     Ok(self.return_value.take().unwrap_or(Value::Nil))
                 })();
@@ -1063,23 +1096,31 @@ impl Interpreter {
                 if result.is_err() {
                     return result;
                 }
-
-                self.global = old_env;
                 result
             }
             Value::AsyncFunction { name, params, default_params, body, closure } => {
-                let old_env = self.global.clone();
                 let new_env = Rc::new(RefCell::new(Environment::with_parent(closure.clone())));
 
+                // Execute default values BEFORE replacing global
+                let mut param_values = Vec::new();
                 for (i, param_id) in params.iter().enumerate() {
                     let val = if i < args.len() {
                         args[i].clone()
-                    } else if i >= params.len() && (i - params.len()) < default_params.len() {
-                        self.execute_expr(default_params[i - params.len()].clone())?
+                    } else if i < default_params.len() {
+                        if let Some(default_expr) = &default_params[i] {
+                            self.execute_expr(default_expr.clone())?
+                        } else {
+                            Value::Nil
+                        }
                     } else {
                         Value::Nil
                     };
-                    new_env.borrow_mut().define(InternedString::new(*param_id), val);
+                    param_values.push((*param_id, val));
+                }
+
+                // Now define parameters in new environment
+                for (param_id, val) in param_values {
+                    new_env.borrow_mut().define(InternedString::new(param_id), val);
                 }
 
                 self.call_stack.push(StackFrame {
@@ -1089,13 +1130,13 @@ impl Interpreter {
 
                 // Create a Future value
                 let future_state = Rc::new(RefCell::new(crate::value::FutureState::Pending));
-                let future_value = Value::Future(future_state.clone());
-
+                let _future_value = Value::Future(future_state.clone());
                 // Execute the async function body
                 let old_global = std::mem::replace(&mut self.global, new_env.clone());
                 let result = (|| -> Result<Value, String> {
                     for stmt in &body {
                         self.execute_stmt(stmt.clone())?;
+                if self.return_value.is_some() { break; }
                     }
                     Ok(self.return_value.take().unwrap_or(Value::Nil))
                 })();
@@ -1120,9 +1161,7 @@ impl Interpreter {
                 gen_state.is_done = false;
                 drop(gen_state);
 
-                let old_env = self.global.clone();
                 let new_env = Rc::new(RefCell::new(Environment::with_parent(closure.clone())));
-
                 for (i, param_id) in params.iter().enumerate() {
                     let val = if i < args.len() {
                         args[i].clone()
@@ -1142,6 +1181,7 @@ impl Interpreter {
                 let _result = (|| -> Result<Value, String> {
                     for stmt in &body {
                         self.execute_stmt(stmt.clone())?;
+                if self.return_value.is_some() { break; }
                     }
                     Ok(self.return_value.take().unwrap_or(Value::Nil))
                 })();
@@ -1172,7 +1212,65 @@ impl Interpreter {
         }
     }
 
-    fn get_index(&self, obj: Value, idx: Value) -> Result<Value, String> {
+pub fn json_parse(&mut self, s: &str) -> Result<Value, String> {
+        let parsed = serde_json::from_str::<serde_json::Value>(s)
+            .map_err(|e| format!("JSON parse error: {e}"))?;
+        
+        fn convert_json(v: &serde_json::Value, depth: usize, interner: &mut crate::string_intern::StringInterner) -> Result<Value, String> {
+            if depth > 100 { return Err("JSON depth limit exceeded".to_string()); }
+            match v {
+                serde_json::Value::Null => Ok(Value::Nil),
+                serde_json::Value::Bool(b) => Ok(Value::Bool(*b)),
+                serde_json::Value::Number(n) => Ok(Value::Number(n.as_f64().unwrap_or(0.0))),
+                serde_json::Value::String(s) => Ok(Value::String(s.clone())),
+                serde_json::Value::Array(arr) => {
+                    let mut smallvec = SmallVec::new();
+                    for item in arr { smallvec.push(convert_json(item, depth + 1, interner)?); }
+                    Ok(Value::Array(Rc::new(RefCell::new(smallvec))))
+                }
+                serde_json::Value::Object(obj) => {
+                    let mut map = HashMap::new();
+                    for (k, v) in obj {
+                        let key_id = interner.intern(k);
+                        map.insert(key_id, convert_json(v, depth + 1, interner)?);
+                    }
+                    Ok(Value::Table(Rc::new(RefCell::new(map))))
+                }
+            }
+        }
+        convert_json(&parsed, 0, &mut self.interner)
+    }
+    
+    pub fn json_stringify(&self, v: &Value) -> Result<String, String> {
+        fn convert_value(v: &Value, interner: &crate::string_intern::StringInterner) -> Result<serde_json::Value, String> {
+            Ok(match v {
+                Value::Number(n) => serde_json::Value::Number(serde_json::Number::from_f64(*n).unwrap_or(serde_json::Number::from(0))),
+                Value::String(s) => serde_json::Value::String(s.clone()),
+                Value::Bool(b) => serde_json::Value::Bool(*b),
+                Value::Nil => serde_json::Value::Null,
+                Value::Array(arr) => {
+                    let vec: Result<Vec<_>, _> = arr.borrow().iter().map(|x| convert_value(x, interner)).collect();
+                    serde_json::Value::Array(vec?)
+                }
+                Value::Table(t) => {
+                    let mut map = serde_json::Map::new();
+                    for (k, v) in t.borrow().iter() {
+                        if let Some(key_str) = interner.get(*k) {
+                            map.insert(key_str.to_string(), convert_value(v, interner)?);
+                        } else {
+                            map.insert(k.to_string(), convert_value(v, interner)?);
+                        }
+                    }
+                    serde_json::Value::Object(map)
+                }
+                _ => return Err(format!("Cannot convert {:?} to JSON", v))
+            })
+        }
+        let json = convert_value(v, &self.interner)?;
+        Ok(serde_json::to_string(&json).map_err(|e| format!("JSON stringify error: {e}"))?)
+    }
+
+    fn get_index(&mut self, obj: Value, idx: Value) -> Result<Value, String> {
         match (obj, idx) {
             (Value::Array(arr), Value::Number(i)) => {
                 let idx = i as usize;
@@ -1183,9 +1281,10 @@ impl Interpreter {
                     Ok(Value::Nil)
                 }
             }
-            (Value::Table(t), Value::Number(i)) => {
+            (Value::Table(t), Value::String(s)) => {
+                let id = self.interner.intern(&s);
                 let t_ref = t.borrow();
-                Ok(t_ref.get(&(i as usize)).cloned().unwrap_or(Value::Nil))
+                Ok(t_ref.get(&id).cloned().unwrap_or(Value::Nil))
             }
             (Value::String(s), Value::Number(i)) => {
                 let idx = i as usize;
@@ -1199,7 +1298,7 @@ impl Interpreter {
         }
     }
 
-    fn set_index(&self, obj: Value, idx: Value, val: Value) -> Result<(), String> {
+    fn set_index(&mut self, obj: Value, idx: Value, val: Value) -> Result<(), String> {
         match (obj, idx) {
             (Value::Array(arr), Value::Number(i)) => {
                 let idx = i as usize;
@@ -1211,10 +1310,10 @@ impl Interpreter {
                     Err(format!("Index {idx} out of bounds"))
                 }
             }
-            (Value::Table(t), Value::Number(i)) => {
-                let mut t_ref = t.borrow_mut();
-                t_ref.insert(i as usize, val);
-                Ok(())
+            (Value::Table(t), Value::String(s)) => {
+                let id = self.interner.intern(&s);
+                t.borrow_mut().insert(id, val);
+                return Ok(());
             }
             _ => Err("Invalid index assignment".to_string()),
         }

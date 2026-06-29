@@ -152,21 +152,20 @@ impl fmt::Display for GcStats {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Color {
     White,
-    Gray,
-    Black,
 }
 
 // Heap Object
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct HeapObject {
     id: usize,
     size: usize,
-    ref_count: Cell<usize>,
     color: Cell<Color>,
     marked: Cell<bool>,
     generation: Cell<u8>,
     age: Cell<u8>,
+    ref_count: Cell<usize>,
     is_root: Cell<bool>,
 }
 
@@ -209,6 +208,7 @@ impl Arena {
 
 // Generational Heap
 
+#[allow(dead_code)]
 struct GenHeap {
     young: HashSet<usize>,
     old: HashSet<usize>,
@@ -218,7 +218,6 @@ impl GenHeap {
     fn new() -> Self { Self { young: HashSet::new(), old: HashSet::new() } }
     fn add(&mut self, id: usize) { self.young.insert(id); }
     fn young_count(&self) -> usize { self.young.len() }
-    fn old_count(&self) -> usize { self.old.len() }
 }
 
 // Garbage Collector

@@ -427,7 +427,7 @@ impl Parser {
     fn factor(&mut self) -> Result<Expr, String> {
         let line = self.peek().line;
         let mut left = self.unary()?;
-        while self.match_token(&TokenKind::Star) || self.match_token(&TokenKind::Slash) {
+            while self.match_token(&TokenKind::Star) || self.match_token(&TokenKind::Slash) || self.match_token(&TokenKind::Percent) {
             let op = self.previous().kind.clone();
             let right = self.unary()?;
             left = Expr::Binary { left: Box::new(left), op, right: Box::new(right), line };
@@ -550,10 +550,32 @@ impl Parser {
             return Ok(Expr::Number(num));
         }
         if self.match_token(&TokenKind::FString) { return self.fstring_literal(line); }
-        if self.match_token(&TokenKind::String) {
-            let s = self.previous().lexeme.clone();
-            return Ok(Expr::String(s[1..s.len()-1].to_string()));
+        if self.match_token( &TokenKind::String) {
+        let s = self.previous().lexeme.clone();
+        let raw = &s[1..s.len()-1];
+        let mut result = String::new();
+        let mut chars = raw.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                if let Some(&next) = chars.peek() {
+                    match next {
+                        'n' => { chars.next(); result.push('\n'); }
+                        't' => { chars.next(); result.push('\t'); }
+                        'r' => { chars.next(); result.push('\r'); }
+                        '"' => { chars.next(); result.push('"'); }
+                        '\'' => { chars.next(); result.push('\''); }
+                        '\\' => { chars.next(); result.push('\\'); }
+                        _ => result.push(c),
+                    }
+                } else {
+                    result.push(c);
+                }
+            } else {
+                result.push(c);
+            }
         }
+        return Ok(Expr::String(result));
+    }
         if self.match_token(&TokenKind::Await) {
             // Await should parse the next primary expression (typically a function call or identifier)
             // We use a loop to skip any nested awaits and get to the actual expression
@@ -579,15 +601,20 @@ impl Parser {
             return self.table_literal(line);
         }
         if self.match_token(&TokenKind::LBracket) { return self.array_literal(line); }
-        if self.match_token(&TokenKind::LParen) {
-            if self.check_lambda() { return self.lambda_literal(line); }
-            let expr = self.expression()?;
-            self.consume(&TokenKind::RParen, "Expected ')' after expression")?;
-            return Ok(expr);
+        if self.check(&TokenKind::LParen) {
+        if self.check_lambda() { 
+            self.advance(); // consume LParen
+            return self.lambda_literal(line); 
+        }
+        self.advance(); // consume LParen
+        let expr = self.expression()?;
+        self.consume(&TokenKind::RParen, "Expected ')' after expression")?;
+        return Ok(expr);
         }
         if self.match_token(&TokenKind::Identifier) {
+            let param_lexeme = self.previous().lexeme.clone();
             if self.match_token(&TokenKind::FatArrow) {
-                let param_name = self.intern(&self.previous().lexeme.clone());
+                let param_name = self.intern(&param_lexeme);
                 let body = self.expression()?;
                 return Ok(Expr::Lambda { params: vec![(param_name, None)], body: Box::new(body), line });
             }
@@ -753,6 +780,9 @@ impl Parser {
         if self.match_token(kind) { return Ok(()); }
         Err(format!("{} at line {}", message, self.peek().line))
     }
+    pub fn take_interner(&mut self) -> Option<StringInterner> {
+        self.interner.take()
+    }
 }
 
 impl Parser {
@@ -776,9 +806,11 @@ impl Parser {
                     }
                     expr_str.push(chars.next().unwrap());
                 }
-                let tokens = crate::lexer::tokenize(&expr_str);
-                let mut expr_parser = Parser::new(tokens);
+                let mut interner = self.interner.take().unwrap_or_default();
+                let tokens = crate::lexer::tokenize_with_interner(&expr_str, &mut interner);
+                let mut expr_parser = Parser::with_interner(tokens, interner);
                 let expr = expr_parser.expression()?;
+                self.interner = expr_parser.interner;
                 parts.push((String::new(), Some(Box::new(expr))));
             } else if c == '\\' {
                 if let Some(&next) = chars.peek() {

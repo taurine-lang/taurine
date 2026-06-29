@@ -23,14 +23,14 @@ pub enum Value {
     Function {
         name: usize,
         params: Vec<usize>,
-        default_params: Vec<crate::ast::Expr>,
+        default_params: Vec<Option<crate::ast::Expr>>,
         body: Vec<crate::ast::Stmt>,
         closure: Rc<RefCell<Environment>>,
     },
     AsyncFunction {
         name: usize,
         params: Vec<usize>,
-        default_params: Vec<crate::ast::Expr>,
+        default_params: Vec<Option<crate::ast::Expr>>,
         body: Vec<crate::ast::Stmt>,
         closure: Rc<RefCell<Environment>>,
     },

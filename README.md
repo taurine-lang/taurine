@@ -60,7 +60,7 @@ print(f"x + y = {x + y}")
 ```taurine
 // Variables
 let name = "Taurine"
-const VERSION = "1.0.5"
+const VERSION = "2.12.0"
 
 // Functions with multi-return
 function divmod(a, b) {
