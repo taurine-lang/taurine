@@ -67,7 +67,7 @@ path = "examples/embedding/03_rust_functions.rs"
 
 [[bin]]
 name = "taurine" 
-path: target/release/main
+path: target/release/taurine
 
 [profile.release]
 opt-level = 3
