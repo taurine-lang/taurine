@@ -65,6 +65,10 @@ path = "examples/embedding/02_calling_functions.rs"
 name = "03_rust_functions"
 path = "examples/embedding/03_rust_functions.rs"
 
+[[bin]]
+name = "taurine" 
+path: target/release/main
+
 [profile.release]
 opt-level = 3
 lto = true
