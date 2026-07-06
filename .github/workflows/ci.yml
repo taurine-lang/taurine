@@ -1,3 +1,5 @@
+name: CI
+
 on:
   push:
     branches: [ main, develop ]
@@ -20,14 +22,12 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: ${{ matrix.rust }}
 
     - name: Cache cargo registry
-      uses: actions/cache@v4
+      uses: actions/cache@v3
       with:
         path: |
           ~/.cargo/registry
@@ -49,9 +49,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
+      uses: dtolnay/rust-toolchain@stable
       with:
         components: rustfmt, clippy
 
@@ -72,30 +70,13 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
+      uses: dtolnay/rust-toolchain@stable
 
     - name: Build release
       run: cargo build --release --verbose
 
-    - name: Upload artifacts (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@v4
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
       with:
-        name: taurine-linux
-        path: target/release/taurine
-
-    - name: Upload artifacts (Windows)
-      if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: taurine-windows
-        path: target/release/taurine.exe
-
-    - name: Upload artifacts (macOS)
-      if: matrix.os == 'macos-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: taurine-macos
-        path: target/release/taurine
+        name: taurine-${{ matrix.os }}
+        path: target/release/taurine${{ matrix.os == 'windows-latest' && '.exe' || '' }}
