@@ -1,7 +1,6 @@
 //! Environment management
-
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use crate::value::Value;
 use crate::string_intern::InternedString;
@@ -9,7 +8,7 @@ use crate::string_intern::InternedString;
 #[derive(Clone, Debug)]
 pub struct Environment {
     pub values: Rc<RefCell<HashMap<usize, Value>>>,
-    parent: Option<Rc<RefCell<Environment>>>,
+    parent: Option<Weak<RefCell<Environment>>>, // Изменено на Weak
     constants: Rc<RefCell<HashMap<usize, ()>>>,
 }
 
@@ -25,7 +24,7 @@ impl Environment {
     pub fn with_parent(parent: Rc<RefCell<Environment>>) -> Self {
         Self {
             values: Rc::new(RefCell::new(HashMap::new())),
-            parent: Some(parent),
+            parent: Some(Rc::downgrade(&parent)), // Создаем Weak ссылку
             constants: Rc::new(RefCell::new(HashMap::new())),
         }
     }
@@ -35,14 +34,11 @@ impl Environment {
     }
 
     pub fn define_with_name(&mut self, name: &str, value: Value) {
-        // For FFI - store value with a hash-based ID
         use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
-        
         let mut hasher = DefaultHasher::new();
         name.hash(&mut hasher);
         let id = hasher.finish() as usize;
-        
         self.values.borrow_mut().insert(id, value);
     }
 
@@ -55,8 +51,10 @@ impl Environment {
         if self.constants.borrow().contains_key(&name_id) {
             return true;
         }
-        if let Some(parent) = &self.parent {
-            return parent.borrow().is_const(name_id);
+        if let Some(weak_parent) = &self.parent {
+            if let Some(parent) = weak_parent.upgrade() {
+                return parent.borrow().is_const(name_id);
+            }
         }
         false
     }
@@ -65,26 +63,28 @@ impl Environment {
         if let Some(value) = self.values.borrow().get(&name.id()) {
             return Ok(value.clone());
         }
-        if let Some(parent) = &self.parent {
-            return parent.borrow().get(name);
+        if let Some(weak_parent) = &self.parent {
+            if let Some(parent) = weak_parent.upgrade() {
+                return parent.borrow().get(name);
+            }
         }
         Err(format!("Undefined variable: {}", name.id()))
     }
 
     pub fn get_by_name(&self, name: &str) -> Result<Value, String> {
-        // For FFI - lookup by string name using hash
         use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
-        
         let mut hasher = DefaultHasher::new();
         name.hash(&mut hasher);
         let id = hasher.finish() as usize;
-        
+
         if let Some(value) = self.values.borrow().get(&id) {
             return Ok(value.clone());
         }
-        if let Some(parent) = &self.parent {
-            return parent.borrow().get_by_name(name);
+        if let Some(weak_parent) = &self.parent {
+            if let Some(parent) = weak_parent.upgrade() {
+                return parent.borrow().get_by_name(name);
+            }
         }
         Err(format!("Undefined variable: {name}"))
     }
@@ -93,8 +93,10 @@ impl Environment {
         if self.values.borrow_mut().insert(name.id(), value.clone()).is_some() {
             return Ok(());
         }
-        if let Some(parent) = &self.parent {
-            return parent.borrow_mut().assign(name, value);
+        if let Some(weak_parent) = &self.parent {
+            if let Some(parent) = weak_parent.upgrade() {
+                return parent.borrow_mut().assign(name, value);
+            }
         }
         Err(format!("Undefined variable: {}", name.id()))
     }

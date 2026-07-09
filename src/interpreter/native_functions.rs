@@ -10,6 +10,7 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::io::Read;
 use smallvec::SmallVec;
+use std::sync::OnceLock;
 
 /// Sanitize user-provided path to prevent path traversal attacks
 fn sanitize_path(user_path: &str) -> Result<PathBuf, String> {
@@ -553,7 +554,13 @@ fn json_str_to_value(s: &str) -> Result<Value, String> {
         match v {
             serde_json::Value::Null => Ok(Value::Nil),
             serde_json::Value::Bool(b) => Ok(Value::Bool(*b)),
-            serde_json::Value::Number(n) => Ok(Value::Number(n.as_f64().unwrap_or(0.0))),
+            serde_json::Value::Number(n) => {
+                if let Some(f) = n.as_f64() {
+                    Ok(Value::Number(f))
+                } else {
+                    Err(format!("JSON Error: Number '{}' is out of f64 bounds", n))
+                }
+            }
             serde_json::Value::String(s) => Ok(Value::String(s.clone())),
             serde_json::Value::Array(arr) => {
                 let vec: Result<Vec<Value>, String> = arr.iter()
@@ -615,27 +622,40 @@ fn value_to_json_str(v: &Value) -> Result<String, String> {
 /// Maximum HTTP response size (10 MB)
 const MAX_HTTP_RESPONSE_SIZE: usize = 10 * 1024 * 1024;
 
+static HTTP_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+
+fn get_http_client() -> &'static reqwest::blocking::Client {
+    HTTP_CLIENT.get_or_init(|| {
+        reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| reqwest::blocking::Client::new())
+    })
+}
+
 fn register_http_functions(global: &Rc<RefCell<crate::environment::Environment>>) {
     // http_get
     let http_get_fn = |args: &[Value]| -> Result<Value, String> {
         if args.is_empty() { return Err("http_get() requires 1 argument".to_string()); }
         if let Value::String(url) = &args[0] {
-            let response = reqwest::blocking::get(url.as_str())
+            let client = get_http_client();
+            let response = client.get(url.as_str())
+                .send()
                 .map_err(|e| format!("HTTP GET error: {e}"))?;
             
-            // Check Content-Length header
             if let Some(content_length) = response.content_length() {
                 if content_length > MAX_HTTP_RESPONSE_SIZE as u64 {
-                    return Err(format!("Response too large: {} bytes (max: {} bytes)", 
-                        content_length, MAX_HTTP_RESPONSE_SIZE));
+                    return Err(format!("Response too large: {} bytes", content_length));
                 }
             }
             
-            // Read with size limit
-            let mut reader = response.take(MAX_HTTP_RESPONSE_SIZE as u64);
+            let mut reader = response.take((MAX_HTTP_RESPONSE_SIZE + 1) as u64);
             let mut text = String::new();
-            reader.read_to_string(&mut text)
-                .map_err(|e| format!("Read response error: {e}"))?;
+            reader.read_to_string(&mut text).map_err(|e| format!("Read response error: {e}"))?;
+            
+            if text.len() > MAX_HTTP_RESPONSE_SIZE {
+                return Err(format!("HTTP Error: Response truncated. Exceeded limit of {} bytes", MAX_HTTP_RESPONSE_SIZE));
+            }
             Ok(Value::String(text))
         } else { Err("http_get() requires string URL".to_string()) }
     };
@@ -645,25 +665,19 @@ fn register_http_functions(global: &Rc<RefCell<crate::environment::Environment>>
     let http_post_fn = |args: &[Value]| -> Result<Value, String> {
         if args.len() < 2 { return Err("http_post() requires 2 arguments".to_string()); }
         if let (Value::String(url), Value::String(data)) = (&args[0], &args[1]) {
-            let client = reqwest::blocking::Client::new();
+            let client = get_http_client();
             let response = client.post(url.as_str())
                 .body(data.clone())
                 .send()
                 .map_err(|e| format!("HTTP POST error: {e}"))?;
             
-            // Check Content-Length header
-            if let Some(content_length) = response.content_length() {
-                if content_length > MAX_HTTP_RESPONSE_SIZE as u64 {
-                    return Err(format!("Response too large: {} bytes (max: {} bytes)", 
-                        content_length, MAX_HTTP_RESPONSE_SIZE));
-                }
-            }
-            
-            // Read with size limit
-            let mut reader = response.take(MAX_HTTP_RESPONSE_SIZE as u64);
+            let mut reader = response.take((MAX_HTTP_RESPONSE_SIZE + 1) as u64);
             let mut text = String::new();
-            reader.read_to_string(&mut text)
-                .map_err(|e| format!("Read response error: {e}"))?;
+            reader.read_to_string(&mut text).map_err(|e| format!("Read response error: {e}"))?;
+            
+            if text.len() > MAX_HTTP_RESPONSE_SIZE {
+                return Err(format!("HTTP Error: Response truncated. Exceeded limit of {} bytes", MAX_HTTP_RESPONSE_SIZE));
+            }
             Ok(Value::String(text))
         } else { Err("http_post() requires string URL and data".to_string()) }
     };
@@ -673,25 +687,19 @@ fn register_http_functions(global: &Rc<RefCell<crate::environment::Environment>>
     let http_put_fn = |args: &[Value]| -> Result<Value, String> {
         if args.len() < 2 { return Err("http_put() requires 2 arguments".to_string()); }
         if let (Value::String(url), Value::String(data)) = (&args[0], &args[1]) {
-            let client = reqwest::blocking::Client::new();
+            let client = get_http_client();
             let response = client.put(url.as_str())
                 .body(data.clone())
                 .send()
                 .map_err(|e| format!("HTTP PUT error: {e}"))?;
             
-            // Check Content-Length header
-            if let Some(content_length) = response.content_length() {
-                if content_length > MAX_HTTP_RESPONSE_SIZE as u64 {
-                    return Err(format!("Response too large: {} bytes (max: {} bytes)", 
-                        content_length, MAX_HTTP_RESPONSE_SIZE));
-                }
-            }
-            
-            // Read with size limit
-            let mut reader = response.take(MAX_HTTP_RESPONSE_SIZE as u64);
+            let mut reader = response.take((MAX_HTTP_RESPONSE_SIZE + 1) as u64);
             let mut text = String::new();
-            reader.read_to_string(&mut text)
-                .map_err(|e| format!("Read response error: {e}"))?;
+            reader.read_to_string(&mut text).map_err(|e| format!("Read response error: {e}"))?;
+            
+            if text.len() > MAX_HTTP_RESPONSE_SIZE {
+                return Err(format!("HTTP Error: Response truncated. Exceeded limit of {} bytes", MAX_HTTP_RESPONSE_SIZE));
+            }
             Ok(Value::String(text))
         } else { Err("http_put() requires string URL and data".to_string()) }
     };
@@ -701,12 +709,18 @@ fn register_http_functions(global: &Rc<RefCell<crate::environment::Environment>>
     let http_delete_fn = |args: &[Value]| -> Result<Value, String> {
         if args.is_empty() { return Err("http_delete() requires 1 argument".to_string()); }
         if let Value::String(url) = &args[0] {
-            let client = reqwest::blocking::Client::new();
+            let client = get_http_client();
             let response = client.delete(url.as_str())
                 .send()
                 .map_err(|e| format!("HTTP DELETE error: {e}"))?;
-            let text = response.text()
-                .map_err(|e| format!("Read response error: {e}"))?;
+            
+            let mut reader = response.take((MAX_HTTP_RESPONSE_SIZE + 1) as u64);
+            let mut text = String::new();
+            reader.read_to_string(&mut text).map_err(|e| format!("Read response error: {e}"))?;
+            
+            if text.len() > MAX_HTTP_RESPONSE_SIZE {
+                return Err(format!("HTTP Error: Response truncated. Exceeded limit of {} bytes", MAX_HTTP_RESPONSE_SIZE));
+            }
             Ok(Value::String(text))
         } else { Err("http_delete() requires string URL".to_string()) }
     };

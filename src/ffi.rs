@@ -37,7 +37,7 @@ pub struct TaurineValue {
 // VM Management
 
 /// Create a new Taurine VM
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_new() -> *mut TaurineVM {
     let vm = TaurineVM {
         interpreter: Interpreter::new(PathBuf::from(".")),
@@ -47,7 +47,7 @@ pub extern "C" fn taurine_new() -> *mut TaurineVM {
 }
 
 /// Create a new Taurine VM with custom base path
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_new_with_path(path: *const c_char) -> *mut TaurineVM {
     if path.is_null() {
         return taurine_new();
@@ -68,7 +68,7 @@ pub extern "C" fn taurine_new_with_path(path: *const c_char) -> *mut TaurineVM {
 }
 
 /// Free a Taurine VM
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_free(vm: *mut TaurineVM) {
     if !vm.is_null() {
         unsafe {
@@ -80,7 +80,7 @@ pub extern "C" fn taurine_free(vm: *mut TaurineVM) {
 // Execution
 
 /// Run Taurine code
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_run(vm: *mut TaurineVM, code: *const c_char) -> c_int {
     if vm.is_null() || code.is_null() {
         return -1;
@@ -107,7 +107,7 @@ pub extern "C" fn taurine_run(vm: *mut TaurineVM, code: *const c_char) -> c_int 
 }
 
 /// Run a Taurine file
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_run_file(vm: *mut TaurineVM, filename: *const c_char) -> c_int {
     if vm.is_null() || filename.is_null() {
         return -1;
@@ -140,7 +140,7 @@ pub extern "C" fn taurine_run_file(vm: *mut TaurineVM, filename: *const c_char) 
 }
 
 /// Get last error message
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_get_error(vm: *mut TaurineVM) -> *const c_char {
     if vm.is_null() {
         return std::ptr::null();
@@ -159,7 +159,7 @@ pub extern "C" fn taurine_get_error(vm: *mut TaurineVM) -> *const c_char {
 // Value Creation
 
 /// Create a new number value
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_new_number(n: f64) -> *mut TaurineValue {
     Box::into_raw(Box::new(TaurineValue {
         value: Value::Number(n),
@@ -167,7 +167,7 @@ pub extern "C" fn taurine_new_number(n: f64) -> *mut TaurineValue {
 }
 
 /// Create a new string value
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_new_string(s: *const c_char) -> *mut TaurineValue {
     if s.is_null() {
         return std::ptr::null_mut();
@@ -186,7 +186,7 @@ pub extern "C" fn taurine_new_string(s: *const c_char) -> *mut TaurineValue {
 }
 
 /// Create a new boolean value
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_new_bool(b: c_int) -> *mut TaurineValue {
     Box::into_raw(Box::new(TaurineValue {
         value: Value::Bool(b != 0),
@@ -194,7 +194,7 @@ pub extern "C" fn taurine_new_bool(b: c_int) -> *mut TaurineValue {
 }
 
 /// Create a new nil value
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_new_nil() -> *mut TaurineValue {
     Box::into_raw(Box::new(TaurineValue {
         value: Value::Nil,
@@ -202,7 +202,7 @@ pub extern "C" fn taurine_new_nil() -> *mut TaurineValue {
 }
 
 /// Free a TaurineValue
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_value_free(val: *mut TaurineValue) {
     if !val.is_null() {
         unsafe {
@@ -214,7 +214,7 @@ pub extern "C" fn taurine_value_free(val: *mut TaurineValue) {
 // Value Type Checking
 
 /// Check if value is a number
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_is_number(val: *const TaurineValue) -> c_int {
     if val.is_null() {
         return 0;
@@ -224,7 +224,7 @@ pub extern "C" fn taurine_is_number(val: *const TaurineValue) -> c_int {
 }
 
 /// Check if value is a string
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_is_string(val: *const TaurineValue) -> c_int {
     if val.is_null() {
         return 0;
@@ -234,7 +234,7 @@ pub extern "C" fn taurine_is_string(val: *const TaurineValue) -> c_int {
 }
 
 /// Check if value is a boolean
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_is_bool(val: *const TaurineValue) -> c_int {
     if val.is_null() {
         return 0;
@@ -244,7 +244,7 @@ pub extern "C" fn taurine_is_bool(val: *const TaurineValue) -> c_int {
 }
 
 /// Check if value is nil
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_is_nil(val: *const TaurineValue) -> c_int {
     if val.is_null() {
         return 0;
@@ -254,7 +254,7 @@ pub extern "C" fn taurine_is_nil(val: *const TaurineValue) -> c_int {
 }
 
 /// Check if value is an array
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_is_array(val: *const TaurineValue) -> c_int {
     if val.is_null() {
         return 0;
@@ -264,7 +264,7 @@ pub extern "C" fn taurine_is_array(val: *const TaurineValue) -> c_int {
 }
 
 /// Check if value is a table
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_is_table(val: *const TaurineValue) -> c_int {
     if val.is_null() {
         return 0;
@@ -276,7 +276,7 @@ pub extern "C" fn taurine_is_table(val: *const TaurineValue) -> c_int {
 // Value Conversion
 
 /// Convert value to number
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_as_number(val: *const TaurineValue) -> f64 {
     if val.is_null() {
         return 0.0;
@@ -289,7 +289,7 @@ pub extern "C" fn taurine_as_number(val: *const TaurineValue) -> f64 {
 }
 
 /// Convert value to string
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_as_string(val: *const TaurineValue) -> *const c_char {
     if val.is_null() {
         return std::ptr::null();
@@ -306,7 +306,7 @@ pub extern "C" fn taurine_as_string(val: *const TaurineValue) -> *const c_char {
 }
 
 /// Convert value to boolean
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_as_bool(val: *const TaurineValue) -> c_int {
     if val.is_null() {
         return 0;
@@ -321,7 +321,7 @@ pub extern "C" fn taurine_as_bool(val: *const TaurineValue) -> c_int {
 // Variable Access
 
 /// Get a variable value from VM
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_get(vm: *mut TaurineVM, name: *const c_char) -> *mut TaurineValue {
     if vm.is_null() || name.is_null() {
         return std::ptr::null_mut();
@@ -342,7 +342,7 @@ pub extern "C" fn taurine_get(vm: *mut TaurineVM, name: *const c_char) -> *mut T
 }
 
 /// Set a variable value in VM
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_set(
     vm: *mut TaurineVM,
     name: *const c_char,
@@ -372,7 +372,7 @@ pub extern "C" fn taurine_set(
 // Function Calls
 
 /// Call a Taurine function
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_call(
     vm: *mut TaurineVM,
     name: *const c_char,
@@ -446,7 +446,7 @@ pub extern "C" fn taurine_call(
 // String Freeing
 
 /// Free a string returned by Taurine API
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn taurine_free_string(s: *mut c_char) {
     if !s.is_null() {
         unsafe {

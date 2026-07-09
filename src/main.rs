@@ -75,8 +75,8 @@ fn create_interner_with_builtins() -> StringInterner {
 
 #[derive(Parser, Debug)]
 #[command(name = "taurine")]
-#[command(about = "Taurine Programming Language v2.0", long_about = None)]
-#[command(version = "2.12.0")]
+#[command(about = "Taurine Programming Language v2.12.2", long_about = None)]
+#[command(version = "2.12.2")]
 struct Args {
     file: Option<String>,
     #[arg(short, long, default_value_t = false)]
@@ -133,7 +133,7 @@ fn run_file(args: Args) {
 }
 
 fn run_repl() {
-    println!("Taurine v2.0 REPL");
+    println!("Taurine v2.12.2 REPL");
     println!("Type 'exit' or 'quit' to exit\n");
 
     let interner = create_interner_with_builtins();
@@ -183,7 +183,7 @@ fn run_repl() {
 }
 
 fn run_demo() {
-    println!("Taurine v2.0\n");
+    println!("Taurine v2.12.2\n");
     println!("Usage:");
     println!("  taurine <file.tau>     Run a script");
     println!("  taurine --repl         Start REPL");

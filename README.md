@@ -68,7 +68,7 @@ print(f"x + y = {x + y}")
 ```taurine
 // Variables
 let name = "Taurine"
-let version = "2.12.0"
+let version = "2.12.2"
 
 // Functions with multi-return
 function divmod(a, b) {
@@ -98,7 +98,7 @@ for i in 1..10 {
 
 ```taurine
 // Tables (dictionaries)
-let obj = { name: "Taurine", version: "2.12.0" }
+let obj = { name: "Taurine", version: "2.12.2" }
 print(obj?.name)  // nil-safe access
 print(obj?.missing)  // Returns nil instead of error
 ```

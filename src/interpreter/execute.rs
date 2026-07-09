@@ -109,6 +109,7 @@ pub struct Interpreter {
     /// Memory tracking for GC
     /// String interner for consistent identifier IDs
     interner: crate::string_intern::StringInterner,
+    call_depth: usize,
 }
 
 impl Interpreter {
@@ -148,6 +149,7 @@ impl Interpreter {
             interner,
             module_cache: Rc::new(RefCell::new(std::collections::HashMap::new())),
             gc,
+            call_depth: 0,
         };
         register_builtins(&interp.global);
         interp
@@ -1051,10 +1053,15 @@ impl Interpreter {
     }
 
     fn call_function(&mut self, func: Value, args: Vec<Value>) -> Result<Value, String> {
-        match func {
+        self.call_depth += 1;
+        if self.call_depth > 1000 {
+            self.call_depth -= 1;
+            return Err(format!("Stack overflow: maximum recursion depth (1000) exceeded at line {}", self.current_line));
+        }
+
+        let result = match func {
             Value::Function { name, params, default_params, body, closure } => {
                 let new_env = Rc::new(RefCell::new(Environment::with_parent(closure.clone())));
-
                 let mut param_values = Vec::new();
                 for (i, param_id) in params.iter().enumerate() {
                     let val = if i < args.len() {
@@ -1070,38 +1077,27 @@ impl Interpreter {
                     };
                     param_values.push((*param_id, val));
                 }
-
                 for (param_id, val) in param_values {
-                    
                     new_env.borrow_mut().define(InternedString::new(param_id), val);
                 }
-
                 self.call_stack.push(StackFrame {
                     function: format!("function {name}"),
                     line: self.current_line,
                 });
-
                 let old_global = std::mem::replace(&mut self.global, new_env.clone());
-                let result = (|| -> Result<Value, String> {
+                let exec_result = (|| -> Result<Value, String> {
                     for stmt in &body {
-                    self.execute_stmt(stmt.clone())?;
-                    if self.return_value.is_some() { break; }
+                        self.execute_stmt(stmt.clone())?;
+                        if self.return_value.is_some() { break; }
                     }
                     Ok(self.return_value.take().unwrap_or(Value::Nil))
                 })();
-
                 self.global = old_global;
                 self.call_stack.pop();
-
-                if result.is_err() {
-                    return result;
-                }
-                result
+                exec_result
             }
             Value::AsyncFunction { name, params, default_params, body, closure } => {
                 let new_env = Rc::new(RefCell::new(Environment::with_parent(closure.clone())));
-
-                // Execute default values BEFORE replacing global
                 let mut param_values = Vec::new();
                 for (i, param_id) in params.iter().enumerate() {
                     let val = if i < args.len() {
@@ -1117,35 +1113,25 @@ impl Interpreter {
                     };
                     param_values.push((*param_id, val));
                 }
-
-                // Now define parameters in new environment
                 for (param_id, val) in param_values {
                     new_env.borrow_mut().define(InternedString::new(param_id), val);
                 }
-
                 self.call_stack.push(StackFrame {
                     function: format!("async function {name}"),
                     line: self.current_line,
                 });
-
-                // Create a Future value
                 let future_state = Rc::new(RefCell::new(crate::value::FutureState::Pending));
-                let _future_value = Value::Future(future_state.clone());
-                // Execute the async function body
                 let old_global = std::mem::replace(&mut self.global, new_env.clone());
-                let result = (|| -> Result<Value, String> {
+                let exec_result = (|| -> Result<Value, String> {
                     for stmt in &body {
                         self.execute_stmt(stmt.clone())?;
-                if self.return_value.is_some() { break; }
+                        if self.return_value.is_some() { break; }
                     }
                     Ok(self.return_value.take().unwrap_or(Value::Nil))
                 })();
-
                 self.global = old_global;
                 self.call_stack.pop();
-
-                // Update future state with result
-                match result {
+                match exec_result {
                     Ok(v) => {
                         *future_state.borrow_mut() = crate::value::FutureState::Ready(v.clone());
                         Ok(Value::Future(future_state))
@@ -1154,50 +1140,35 @@ impl Interpreter {
                 }
             }
             Value::Generator { name, params, body, closure, state } => {
-                // Initialize generator state
                 let mut gen_state = state.borrow_mut();
                 gen_state.yielded_values.clear();
                 gen_state.consumed_index = 0;
                 gen_state.is_done = false;
                 drop(gen_state);
-
                 let new_env = Rc::new(RefCell::new(Environment::with_parent(closure.clone())));
                 for (i, param_id) in params.iter().enumerate() {
-                    let val = if i < args.len() {
-                        args[i].clone()
-                    } else {
-                        Value::Nil
-                    };
+                    let val = if i < args.len() { args[i].clone() } else { Value::Nil };
                     new_env.borrow_mut().define(InternedString::new(*param_id), val);
                 }
-
                 self.call_stack.push(StackFrame {
                     function: format!("generator {name}"),
                     line: self.current_line,
                 });
-
-                // Execute generator body to collect yielded values
                 let old_global = std::mem::replace(&mut self.global, new_env.clone());
                 let _result = (|| -> Result<Value, String> {
                     for stmt in &body {
                         self.execute_stmt(stmt.clone())?;
-                if self.return_value.is_some() { break; }
+                        if self.return_value.is_some() { break; }
                     }
                     Ok(self.return_value.take().unwrap_or(Value::Nil))
                 })();
-
                 self.global = old_global;
                 self.call_stack.pop();
-
-                // Mark generator as done
                 state.borrow_mut().is_done = true;
-
-                if _result.is_err() {
-                    return _result;
+                match _result {
+                    Ok(_) => Ok(Value::Generator { name, params, body, closure, state }),
+                    Err(e) => Err(e),
                 }
-
-                // Return the generator object itself
-                Ok(Value::Generator { name, params, body, closure, state })
             }
             Value::NativeFunction(func) => {
                 self.call_stack.push(StackFrame {
@@ -1209,10 +1180,12 @@ impl Interpreter {
                 result
             }
             _ => Err(format!("Cannot call non-function value: {func:?}")),
-        }
+        };
+        self.call_depth -= 1; 
+        result
     }
 
-pub fn json_parse(&mut self, s: &str) -> Result<Value, String> {
+    pub fn json_parse(&mut self, s: &str) -> Result<Value, String> {
         let parsed = serde_json::from_str::<serde_json::Value>(s)
             .map_err(|e| format!("JSON parse error: {e}"))?;
         
@@ -1221,7 +1194,13 @@ pub fn json_parse(&mut self, s: &str) -> Result<Value, String> {
             match v {
                 serde_json::Value::Null => Ok(Value::Nil),
                 serde_json::Value::Bool(b) => Ok(Value::Bool(*b)),
-                serde_json::Value::Number(n) => Ok(Value::Number(n.as_f64().unwrap_or(0.0))),
+                serde_json::Value::Number(n) => {
+                    if let Some(f) = n.as_f64() {
+                        Ok(Value::Number(f))
+                    } else {
+                        Err(format!("JSON Error: Number '{}' is out of f64 bounds", n))
+                    }
+                }
                 serde_json::Value::String(s) => Ok(Value::String(s.clone())),
                 serde_json::Value::Array(arr) => {
                     let mut smallvec = SmallVec::new();
@@ -1370,8 +1349,8 @@ pub fn json_parse(&mut self, s: &str) -> Result<Value, String> {
             _ => Err("Cannot instantiate non-class".to_string()),
         }
     }
-}
 
+}
 use std::collections::HashMap;
 use crate::environment::Environment;
 
