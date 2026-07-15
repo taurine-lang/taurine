@@ -85,7 +85,6 @@ pub extern "C" fn taurine_run(vm: *mut TaurineVM, code: *const c_char) -> c_int 
     if vm.is_null() || code.is_null() {
         return -1;
     }
-    
     let vm = unsafe { &mut *vm };
     let code_str = unsafe {
         match CStr::from_ptr(code).to_str() {
@@ -96,11 +95,10 @@ pub extern "C" fn taurine_run(vm: *mut TaurineVM, code: *const c_char) -> c_int 
             }
         }
     };
-    
     match vm.interpreter.run(code_str) {
         Ok(_) => 0,
         Err(e) => {
-            vm.last_error = Some(e);
+            vm.last_error = Some(e.to_string());
             -1
         }
     }
@@ -112,7 +110,6 @@ pub extern "C" fn taurine_run_file(vm: *mut TaurineVM, filename: *const c_char) 
     if vm.is_null() || filename.is_null() {
         return -1;
     }
-    
     let vm = unsafe { &mut *vm };
     let filename_str = unsafe {
         match CStr::from_ptr(filename).to_str() {
@@ -123,12 +120,11 @@ pub extern "C" fn taurine_run_file(vm: *mut TaurineVM, filename: *const c_char) 
             }
         }
     };
-    
     match std::fs::read_to_string(filename_str) {
         Ok(code) => match vm.interpreter.run(&code) {
             Ok(_) => 0,
             Err(e) => {
-                vm.last_error = Some(e);
+                vm.last_error = Some(e.to_string());
                 -1
             }
         },
@@ -416,7 +412,7 @@ pub extern "C" fn taurine_call(
             // Call the function
             match &func_value {
                 Value::NativeFunction(native_fn) => {
-                    match native_fn(&arg_vec) {
+                    match native_fn(&arg_vec, &mut vm.interpreter.interner) {
                         Ok(result) => Box::into_raw(Box::new(TaurineValue { value: result })),
                         Err(e) => {
                             vm.last_error = Some(e);

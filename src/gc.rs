@@ -217,6 +217,8 @@ struct GenHeap {
 impl GenHeap {
     fn new() -> Self { Self { young: HashSet::new(), old: HashSet::new() } }
     fn add(&mut self, id: usize) { self.young.insert(id); }
+
+    #[allow(dead_code)]
     fn young_count(&self) -> usize { self.young.len() }
 }
 
@@ -656,7 +658,7 @@ mod tests {
         let ptr = GcPtr::new(42, &mut gc);
         assert_eq!(*ptr, 42);
         assert_eq!(ptr.strong_count(), 1);
-        let ptr2 = ptr.clone();
+        let _ptr2 = ptr.clone();
         assert_eq!(ptr.strong_count(), 2);
     }
 }

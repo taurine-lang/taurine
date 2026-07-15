@@ -141,20 +141,3 @@ function reduce(arr, fn, initial) {
     }
     return result
 }
-
-// ============================================================================
-// Method-style API (syntactic sugar)
-// ============================================================================
-
-// Array methods can be called as: array.method(arr, ...)
-// Future versions may support: arr.method(...)
-
-// ============================================================================
-// Exports
-// ============================================================================
-
-export {
-    len, push, pop, concat, reverse, clear,
-    get, set, slice, forEach, map, filter, find,
-    includes, indexOf, join, reduce
-}

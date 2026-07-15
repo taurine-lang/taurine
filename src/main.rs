@@ -133,46 +133,49 @@ fn run_file(args: Args) {
 }
 
 fn run_repl() {
-    println!("Taurine v2.12.2 REPL");
+    println!("Taurine v2.12 REPL");
     println!("Type 'exit' or 'quit' to exit\n");
 
-    let interner = create_interner_with_builtins();
+    // 1. Инициализируем интернер и интерпретатор ОДИН РАЗ вне цикла
+    let mut interner = create_interner_with_builtins();
     let mut interpreter = Interpreter::with_interner(PathBuf::from("."), interner.clone());
     let mut input = String::new();
 
     loop {
         print!("taurine> ");
         io::stdout().flush().unwrap();
-
         input.clear();
         if io::stdin().read_line(&mut input).is_err() {
             break;
         }
 
-        let input = input.trim();
-        if input == "exit" || input == "quit" {
+        let input_trimmed = input.trim();
+        if input_trimmed == "exit" || input_trimmed == "quit" {
             println!("Goodbye!");
             break;
         }
-
-        if input == "clear" {
+        if input_trimmed == "clear" {
             #[cfg(target_os = "windows")]
             std::process::Command::new("cmd").args(["/C", "cls"]).status().unwrap();
             #[cfg(not(target_os = "windows"))]
             std::process::Command::new("clear").status().unwrap();
             continue;
         }
-
-        if input.is_empty() {
+        if input_trimmed.is_empty() {
             continue;
         }
 
-        let mut interner = create_interner_with_builtins();
-        let tokens = tokenize_with_interner(input, &mut interner);
-        let mut parser = TaurineParser::with_interner(tokens, interner);
+        // 2. Используем ТОТ ЖЕ интернер, чтобы ID переменных сохранялись между строками
+        let tokens = tokenize_with_interner(input_trimmed, &mut interner);
+        let mut parser = TaurineParser::with_interner(tokens, interner.clone());
 
         match parser.parse() {
             Ok(program) => {
+                // Забираем обновленный интернер из парсера (на случай, если появились новые строки)
+                if let Some(updated_interner) = parser.take_interner() {
+                    interner = updated_interner;
+                }
+                
                 if let Err(e) = interpreter.interpret(program) {
                     eprintln!("{e}");
                 }
@@ -224,7 +227,7 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
     let mut program = match parser.parse() {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("Error: Parse error: {e}");
+            eprintln!("Parse error: {e}");
             std::process::exit(1);
         }
     };
@@ -266,12 +269,16 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
             if debug {
                 println!("\nSuccess!");
                 println!("Execution time: {:.4} seconds ({:.2} ms)",
-                         exec_time.as_secs_f64(),
-                         exec_time.as_secs_f64() * 1000.0);
+                    exec_time.as_secs_f64(),
+                    exec_time.as_secs_f64() * 1000.0);
             }
         }
         Err(e) => {
-            eprintln!("\n{e}");
+            // КРАСИВЫЙ ВЫВОД ОШИБКИ С ЦВЕТАМИ
+            eprintln!("error: {}", e.message());
+            if e.line() > 0 {
+                eprintln!("line {}", e.line());
+            }
             std::process::exit(1);
         }
     }

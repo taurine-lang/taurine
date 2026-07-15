@@ -6,7 +6,7 @@ authors = ["ffsonDev"]
 description = "Fast, embeddable scripting language implemented in Rust"
 license = "MIT"
 repository = "https://github.com/ffsonDev/taurine"
-keywords = ["language", "scripting", "interpreter", "lua", "rust"]
+keywords = ["language", "scripting", "interpreter", "rust"]
 categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
@@ -26,6 +26,7 @@ smallvec = { version = "1.11", features = ["union"] }
 twox-hash = "1.6"
 thiserror = "1.0"
 dirs = "5.0"
+indexmap = "2.2"
 
 # Async runtime
 tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "fs", "net", "io-util", "time"], optional = true }

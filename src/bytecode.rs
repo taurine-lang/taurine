@@ -7,7 +7,7 @@ use crate::environment::Environment;
 use crate::string_intern::{StringInterner, InternedString};
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
@@ -143,7 +143,7 @@ pub struct Compiler {
     functions: Vec<BytecodeFunction>,
     constants: Vec<Value>,
     string_interner: StringInterner,
-    locals: HashMap<usize, usize>,
+    locals: IndexMap<usize, usize>,
     slot_count: usize,
     max_slots: usize,
 }
@@ -154,7 +154,7 @@ impl Compiler {
             functions: Vec::new(),
             constants: Vec::new(),
             string_interner: StringInterner::with_capacity(256),
-            locals: HashMap::new(),
+            locals: IndexMap::new(),
             slot_count: 0,
             max_slots: 0,
         }
@@ -174,6 +174,9 @@ impl Compiler {
         let old_locals = self.locals.clone();
         let old_slot_count = self.slot_count;
         let old_max_slots = self.max_slots;
+
+        let old_constants = std::mem::take(&mut self.constants);
+
         self.locals.clear();
         self.slot_count = 0;
         self.max_slots = 0;
@@ -188,15 +191,19 @@ impl Compiler {
         instructions.push(Instruction::ReturnNil);
         let arity = params.len();
         let max_slots = self.max_slots;
+
         self.locals = old_locals;
         self.slot_count = old_slot_count;
         self.max_slots = old_max_slots;
+
+        let constants = std::mem::replace(&mut self.constants, old_constants);
+
         BytecodeFunction {
             name,
             params,
             arity,
             instructions,
-            constants: Vec::new(),
+            constants,
             max_slots,
         }
     }
@@ -596,8 +603,9 @@ impl Compiler {
 
 pub struct VirtualMachine {
     stack: Vec<Value>,
-    globals: HashMap<usize, Value>,
+    globals: IndexMap<usize, Value>,
     call_frames: Vec<CallFrame>,
+    interner: crate::string_intern::StringInterner,
 }
 
 struct CallFrame {
@@ -610,12 +618,15 @@ impl VirtualMachine {
     pub fn new() -> Self {
         Self {
             stack: Vec::new(),
-            globals: HashMap::new(),
+            globals: IndexMap::new(),
             call_frames: Vec::new(),
+            interner: crate::string_intern::StringInterner::new(),  // ← Добавили
         }
     }
 
     pub fn execute(&mut self, program: &BytecodeProgram) -> Result<(), String> {
+        self.interner = program.string_interner.clone();
+        
         let main = program.main.clone();
         self.call_frames.push(CallFrame {
             function: main,
@@ -926,7 +937,7 @@ impl VirtualMachine {
             }
             Instruction::Class { name, method_count } => {
                 // Create class from methods on stack
-                let mut methods = HashMap::new();
+                let mut methods = IndexMap::new(); // <-- Заменили здесь
                 for i in 0..method_count {
                     if let Some(method) = self.stack.pop() {
                         methods.insert(i, method);
@@ -967,9 +978,8 @@ impl VirtualMachine {
 
     fn call_value(&mut self, callee: Value, args: Vec<Value>) -> Result<Value, String> {
         match callee {
-            Value::NativeFunction(func) => func(&args),
+            Value::NativeFunction(func) => func(&args, &mut self.interner),  // ← Добавили второй аргумент
             Value::Function { name: _, params: _, default_params: _, body: _, closure: _ } => {
-                // Simplified - full implementation would use interpreter
                 Ok(Value::Nil)
             }
             _ => Err(format!("Cannot call non-function value: {callee:?}")),

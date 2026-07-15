@@ -152,11 +152,8 @@ impl fmt::Display for TaurineError {
 impl std::error::Error for TaurineError {}
 
 // Convert from String to TaurineError for backward compatibility
-impl From<String> for TaurineError {
-    fn from(s: String) -> Self {
-        TaurineError::Runtime {
-            message: s,
-            line: 0,
-        }
+impl From<TaurineError> for String {
+    fn from(err: TaurineError) -> Self {
+        err.message()
     }
 }

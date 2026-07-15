@@ -1,5 +1,4 @@
 // std/string.tau — Полная библиотека строк
-
 function len(s) {
     return #s
 }
@@ -25,7 +24,7 @@ function trimRight(s) {
 }
 
 function padLeft(s, length, char) {
-    loc result = s
+    let result = s
     while #result < length {
         result = char + result
     }
@@ -33,7 +32,7 @@ function padLeft(s, length, char) {
 }
 
 function padRight(s, length, char) {
-    loc result = s
+    let result = s
     while #result < length {
         result = result + char
     }
@@ -41,8 +40,8 @@ function padRight(s, length, char) {
 }
 
 function repeat(s, count) {
-    loc result = ""
-    loc i = 0
+    let result = ""
+    let i = 0
     while i < count {
         result = result + s
         i = i + 1
@@ -67,8 +66,8 @@ function split(s, delimiter) {
 }
 
 function join(arr, delimiter) {
-    loc result = ""
-    loc i = 0
+    let result = ""
+    let i = 0
     while i < #arr {
         if i > 0 { result = result + delimiter }
         result = result + tostring(arr[i])
@@ -90,7 +89,7 @@ function startsWith(s, prefix) {
 }
 
 function endsWith(s, suffix) {
-    loc pos = io_strfind(s, suffix)
+    let pos = io_strfind(s, suffix)
     return pos >= 0 and pos + #suffix == #s
 }
 
@@ -103,8 +102,8 @@ function replaceAll(s, pattern, replacement) {
 }
 
 function reverse(s) {
-    loc result = ""
-    loc i = #s - 1
+    let result = ""
+    let i = #s - 1
     while i >= 0 {
         result = result + charAt(s, i)
         i = i - 1

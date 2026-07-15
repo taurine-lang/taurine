@@ -1,20 +1,18 @@
 //! Value types
-
 use std::fmt;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use smallvec::SmallVec;
-
 use crate::environment::Environment;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Value {
     Number(f64),
     String(String),
     Bool(bool),
     Nil,
-    Table(Rc<RefCell<HashMap<usize, Value>>>),
+    Table(Rc<RefCell<IndexMap<usize, Value>>>),
     Array(Rc<RefCell<SmallVec<[Value; 4]>>>),
     Range {
         start: f64,
@@ -39,12 +37,31 @@ pub enum Value {
         params: Vec<usize>,
         body: Vec<crate::ast::Stmt>,
         closure: Rc<RefCell<Environment>>,
-        /// Generator execution state
         state: Rc<RefCell<GeneratorState>>,
     },
-    NativeFunction(fn(&[Value]) -> Result<Value, String>),
+    NativeFunction(Rc<dyn Fn(&[Value], &mut crate::string_intern::StringInterner) -> Result<Value, String>>),
     Future(Rc<RefCell<FutureState>>),
     Error(String),
+}
+
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Number(n) => write!(f, "Number({n})"),
+            Value::String(s) => write!(f, "String({s:?})"),
+            Value::Bool(b) => write!(f, "Bool({b})"),
+            Value::Nil => write!(f, "Nil"),
+            Value::Table(t) => write!(f, "Table({:?})", t.borrow()),
+            Value::Array(arr) => write!(f, "Array({:?})", arr.borrow()),
+            Value::Range { start, end } => write!(f, "Range({start}..{end})"),
+            Value::Function { name, .. } => write!(f, "Function({name})"),
+            Value::AsyncFunction { name, .. } => write!(f, "AsyncFunction({name})"),
+            Value::Generator { name, .. } => write!(f, "Generator({name})"),
+            Value::NativeFunction(_) => write!(f, "NativeFunction(<fn>)"),
+            Value::Future(state) => write!(f, "Future({:?})", state.borrow()),
+            Value::Error(msg) => write!(f, "Error({msg:?})"),
+        }
+    }
 }
 
 /// Generator execution state
@@ -130,7 +147,7 @@ impl Value {
     }
 
     pub fn new_table() -> Self {
-        Value::Table(Rc::new(RefCell::new(HashMap::new())))
+        Value::Table(Rc::new(RefCell::new(IndexMap::new())))
     }
 
     pub fn new_array() -> Self {

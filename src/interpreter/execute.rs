@@ -14,7 +14,6 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use smallvec::SmallVec;
 
-/// Получить глобальную директорию пакетов Taurine
 fn get_global_packages_dir() -> PathBuf {
     let mut path = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."));
@@ -22,34 +21,25 @@ fn get_global_packages_dir() -> PathBuf {
     path.push("packages");
     path
 }
-
-/// Поиск модуля в нескольких локациях
 fn resolve_module_path(base_path: &PathBuf, module_path: &str) -> Option<PathBuf> {
-    // 1. Текущая директория / относительный путь
     let local = base_path.join(module_path);
     if local.exists() {
         return Some(local);
     }
-    
-    // 2. Глобальный кеш пакетов (~/.taurine/packages/)
     let global_dir = get_global_packages_dir();
     if global_dir.exists() {
-        // Прямой поиск (например "http-client" -> ~/.taurine/packages/http-client/)
         let global_pkg = global_dir.join(module_path);
         if global_pkg.exists() {
-            // Найти главный файл пакета
             let main_file = global_pkg.join("main.tau");
             if main_file.exists() {
                 return Some(main_file);
             }
-            // Или файл с тем же именем
             let tau_file = global_pkg.join(format!("{}.tau", module_path));
             if tau_file.exists() {
                 return Some(tau_file);
             }
         }
-        
-        // Поиск в поддиректориях (для пакетов с версиями)
+
         if let Ok(entries) = std::fs::read_dir(&global_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -74,7 +64,6 @@ fn resolve_module_path(base_path: &PathBuf, module_path: &str) -> Option<PathBuf
         }
     }
     
-    // 3. Стандартная библиотека (относительно исполняемого файла)
     let std_path = base_path.join("std").join(format!("{}.tau", module_path));
     if std_path.exists() {
         return Some(std_path);
@@ -104,12 +93,11 @@ pub struct Interpreter {
     control_flow: ControlFlow,
     safety: SafetyContext,
     module_cache: Rc<RefCell<std::collections::HashMap<String, Value>>>,
-    /// Optional garbage collector for memory management
     gc: Option<GarbageCollector>,
-    /// Memory tracking for GC
     /// String interner for consistent identifier IDs
-    interner: crate::string_intern::StringInterner,
+    pub(crate) interner: crate::string_intern::StringInterner,
     call_depth: usize,
+    this_stack: Vec<Value>, 
 }
 
 impl Interpreter {
@@ -138,7 +126,7 @@ impl Interpreter {
         let global = Rc::new(RefCell::new(crate::environment::Environment::new()));
         let safety = SafetyContext::new(limits);
         let gc = gc_config.map(GarbageCollector::new);
-        let interp = Interpreter {
+        let mut interp = Interpreter {
             global,
             return_value: None,
             base_path,
@@ -150,13 +138,20 @@ impl Interpreter {
             module_cache: Rc::new(RefCell::new(std::collections::HashMap::new())),
             gc,
             call_depth: 0,
+            this_stack: Vec::new(),
         };
         register_builtins(&interp.global);
+        interp.load_stdlib(); 
+        
         interp
     }
 
     pub fn clear_module_cache(&self) {
         self.module_cache.borrow_mut().clear();
+    }
+
+    pub fn update_interner(&mut self, new_interner: crate::string_intern::StringInterner) {
+        self.interner = new_interner;
     }
 
     pub fn invalidate_module(&self, path: &str) {
@@ -199,7 +194,6 @@ impl Interpreter {
     }
 
     /// Record memory allocation for GC tracking
-
     pub fn interrupt(&self) {
         self.safety.interrupt();
     }
@@ -212,12 +206,20 @@ impl Interpreter {
         // Placeholder for optimization setup
     }
 
-    pub fn interpret(&mut self, program: Program) -> Result<(), String> {
+    pub fn interpret(&mut self, program: Program) -> Result<(), crate::error::TaurineError> {
         self.safety.reset();
         for stmt in program.statements {
-            self.safety.safety_check()?;
+            self.safety.safety_check().map_err(|e| crate::error::TaurineError::Runtime { 
+                message: e, 
+                line: self.current_line 
+            })?;
+            
             if let Err(e) = self.execute_stmt(stmt) {
-                return Err(self.format_error_with_traceback(&e));
+                let formatted_msg = self.format_error_with_traceback(&e);
+                return Err(crate::error::TaurineError::Runtime { 
+                    message: formatted_msg, 
+                    line: self.current_line 
+                });
             }
         }
         Ok(())
@@ -236,29 +238,40 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn run(&mut self, source: &str) -> Result<(), String> {
-        let tokens = crate::lexer::tokenize(source);
-        let mut parser = crate::parser::Parser::new(tokens);
-        let program = parser.parse()?;
+    pub fn run(&mut self, source: &str) -> Result<(), crate::error::TaurineError> {
+        let tokens = crate::lexer::tokenize_with_interner(source, &mut self.interner);
+        let mut parser = crate::parser::Parser::with_interner(tokens, self.interner.clone());
+        let program = parser.parse().map_err(|e| crate::error::TaurineError::Parse {
+            message: e,
+            line: 0
+        })?;
+        if let Some(updated_interner) = parser.take_interner() {
+            self.interner = updated_interner;
+        }
         self.interpret(program)
     }
 
     pub fn run_optimized(&mut self, source: &str) -> Result<(), String> {
-        let tokens = crate::lexer::tokenize(source);
-        let mut parser = crate::parser::Parser::new(tokens);
+        let tokens = crate::lexer::tokenize_with_interner(source, &mut self.interner);
+        let mut parser = crate::parser::Parser::with_interner(tokens, self.interner.clone());
         let program = parser.parse()?;
+        if let Some(updated_interner) = parser.take_interner() {
+            self.interner = updated_interner;
+        }
         self.interpret_optimized(program)
     }
 
     pub fn get(&self, name: &str) -> Result<Value, String> {
-        // Create a temporary InternedString for lookup
-        // In a real implementation, we would have a reverse lookup table
-        self.global.borrow().get_by_name(name)
+        if let Some(id) = self.interner.get_id(name) {
+        self.global.borrow().get(&InternedString::new(id))
+        } else {
+            Err(format!("Undefined variable: {name}"))
+        }
     }
 
-    /// Set a variable by name (for FFI)
-    pub fn set(&self, name: &str, value: Value) -> Result<(), String> {
-        self.global.borrow_mut().define_with_name(name, value);
+    pub fn set(&mut self, name: &str, value: Value) -> Result<(), String> {
+        let id = self.interner.intern(name);
+        self.global.borrow_mut().define(InternedString::new(id), value);
         Ok(())
     }
 
@@ -279,6 +292,54 @@ impl Interpreter {
             msg.push_str("  [main chunk]\n");
         }
         msg
+    }
+
+        /// Ищет директорию std/ (рядом с бинарником, в текущей папке или по переменной окружения)
+    fn find_std_dir(&self) -> Option<PathBuf> {
+        // 1. Переменная окружения (удобно для тестов)
+        if let Ok(p) = std::env::var("TAURINE_STD_DIR") {
+            let p = PathBuf::from(p);
+            if p.exists() { return Some(p); }
+        }
+        // 2. Рядом с исполняемым файлом (для релиза)
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                let p = dir.join("std");
+                if p.exists() { return Some(p); }
+            }
+        }
+        // 3. В текущей рабочей директории (для cargo run)
+        let p = PathBuf::from("./std");
+        if p.exists() { return Some(p); }
+        
+        None
+    }
+
+    fn load_stdlib(&mut self) {
+        if let Some(dir) = self.find_std_dir() {
+            let core_files = [
+                "array.tau", "json.tau", "crypto.tau", 
+                "date.tau", "http.tau", "regex.tau"
+            ];
+            
+            for file in core_files {
+                let path = dir.join(file);
+                if path.exists() {
+                    if let Ok(source) = std::fs::read_to_string(&path) {
+                        let tokens = crate::lexer::tokenize_with_interner(&source, &mut self.interner);
+                        let mut parser = crate::parser::Parser::with_interner(tokens, self.interner.clone());
+                        
+                        if let Ok(program) = parser.parse() {
+                            if let Some(updated_interner) = parser.take_interner() {
+                                self.interner = updated_interner;
+                            }
+                            let _ = self.interpret(program);
+                            self.return_value = None;
+                        }
+                    }
+                }
+            }
+        }
     }
 
 
@@ -542,7 +603,7 @@ impl Interpreter {
                     params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
                     default_params: params.iter().map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
                     body,
-                    closure: Rc::new(RefCell::new(Environment::new())),
+                    closure: self.global.clone(),
                 };
                 self.global.borrow_mut().define(name, func);
             }
@@ -552,7 +613,7 @@ impl Interpreter {
                     name: name.id(),
                     params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
                     body,
-                    closure: Rc::new(RefCell::new(Environment::new())),
+                    closure: self.global.clone(),
                     state: Rc::new(RefCell::new(crate::value::GeneratorState::default())),
                 };
                 self.global.borrow_mut().define(name, func);
@@ -564,33 +625,32 @@ impl Interpreter {
             }
             Stmt::Import { path, alias, line } => {
                 self.current_line = line;
-                
-                // Использовать универсальный поиск модулей
                 let module_path = resolve_module_path(&self.base_path, &path)
                     .ok_or_else(|| format!("Cannot import '{path}': module not found"))?;
-                
-                let module_key = module_path.to_string_lossy().to_string();
-
+                let canonical_path = std::fs::canonicalize(&module_path).unwrap_or(module_path.clone());
+                let module_key = canonical_path.to_string_lossy().to_string();
                 if let Some(cached) = self.module_cache.borrow().get(&module_key) {
                     if let Some(alias_name) = alias {
                         self.global.borrow_mut().define(alias_name, cached.clone());
                     }
                     return Ok(());
                 }
-
                 let source = std::fs::read_to_string(&module_path)
                     .map_err(|e| format!("Cannot import '{path}': {e}"))?;
-
-                let tokens = lexer::tokenize(&source);
-                let mut parser = crate::parser::Parser::new(tokens);
+                
+                // ИСПРАВЛЕНО: Используем interner для импортов
+                let tokens = lexer::tokenize_with_interner(&source, &mut self.interner);
+                let mut parser = crate::parser::Parser::with_interner(tokens, self.interner.clone());
                 let program = parser.parse()?;
-
-                let mut sub_interp = Interpreter::new(self.base_path.clone());
+                if let Some(updated_interner) = parser.take_interner() {
+                    self.interner = updated_interner;
+                }
+                
+                let mut sub_interp = Interpreter::with_interner(self.base_path.clone(), self.interner.clone());
                 sub_interp.interpret(program)?;
-
+                
                 let module_table = Value::new_table();
                 self.module_cache.borrow_mut().insert(module_key, module_table.clone());
-
                 if let Some(alias_name) = alias {
                     self.global.borrow_mut().define(alias_name, module_table);
                 }
@@ -600,6 +660,9 @@ impl Interpreter {
                 let result = (|| -> Result<(), String> {
                     for stmt in body {
                         self.execute_stmt(stmt)?;
+                        if self.return_value.is_some() || self.control_flow != ControlFlow::None {
+                            break;
+                        }
                     }
                     Ok(())
                 })();
@@ -619,18 +682,23 @@ impl Interpreter {
             }
             Stmt::Class { name, superclass, methods, line } => {
                 self.current_line = line;
-                let mut class_table: HashMap<usize, Value> = HashMap::new();
+                let mut class_table: IndexMap<usize, Value> = IndexMap::new();
                 for method_item in methods {
-                    let (method_name, method_expr): (InternedString, Expr) = method_item;
-                    if let Expr::FunctionLiteral { params, body, .. } = method_expr {
+                    let (member_name, member_expr): (InternedString, Expr) = method_item;
+                    if let Expr::FunctionLiteral { params, body, .. } = member_expr {
+                        // Это метод
                         let method = Value::Function {
-                            name: method_name.id(),
+                            name: member_name.id(),
                             params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
                             default_params: params.iter().map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
                             body,
-                            closure: Rc::new(RefCell::new(Environment::new())),
+                            closure: self.global.clone(),
                         };
-                        class_table.insert(method_name.id(), method);
+                        class_table.insert(member_name.id(), method);
+                    } else {
+                        // Это поле класса (например, width = 10)
+                        let val = self.execute_expr(member_expr)?;
+                        class_table.insert(member_name.id(), val);
                     }
                 }
                 let class_value = Value::Table(Rc::new(RefCell::new(class_table)));
@@ -679,26 +747,35 @@ impl Interpreter {
             Expr::Call { callee, arguments , line } => {
             self.current_line = line;
             
-            // Intercept json_parse (50) and json_stringify (51)
-            if let Expr::Identifier(name) = &*callee {
-                if name.id() == 50 {
-                    let args: Result<Vec<Value>, String> = arguments.into_iter().map(|arg| self.execute_expr(arg)).collect();
-                    let args = args?;
-                    if args.is_empty() { return Err("json_parse() requires 1 argument".to_string()); }
-                    if let Value::String(s) = &args[0] {
-                        return self.json_parse(s);
-                    } else {
-                        return Err("json_parse() requires string".to_string());
+            if let Expr::Get { object, name, .. } = &*callee {
+                let obj_val = self.execute_expr(*object.clone())?;
+                if let Value::Table(ref t) = obj_val {
+                    if let Some(method) = t.borrow().get(&name.id()).cloned() {
+                        // КЛОНИРУЕМ obj_val, чтобы не конфликтовать с borrow
+                        self.this_stack.push(obj_val.clone());
+                        let args_res: Result<Vec<Value>, String> = arguments.into_iter().map(|a| self.execute_expr(a)).collect();
+                        let result = self.call_function(method, args_res?);
+                        self.this_stack.pop();
+                        return result;
                     }
-                } else if name.id() == 51 {
-                    let args: Result<Vec<Value>, String> = arguments.into_iter().map(|arg| self.execute_expr(arg)).collect();
-                    let args = args?;
-                    if args.is_empty() { return Err("json_stringify() requires 1 argument".to_string()); }
-                    let json = self.json_stringify(&args[0])?;
-                    return Ok(Value::String(json));
                 }
             }
 
+            // Перехват безопасного вызова (obj?.method())
+            if let Expr::SafeGet { object, name, .. } = &*callee {
+                let obj_val = self.execute_expr(*object.clone())?;
+                if obj_val == Value::Nil { return Ok(Value::Nil); }
+                if let Value::Table(ref t) = obj_val {
+                    if let Some(method) = t.borrow().get(&name.id()).cloned() {
+                        // КЛОНИРУЕМ obj_val
+                        self.this_stack.push(obj_val.clone());
+                        let args_res: Result<Vec<Value>, String> = arguments.into_iter().map(|a| self.execute_expr(a)).collect();
+                        let result = self.call_function(method, args_res?);
+                        self.this_stack.pop();
+                        return result;
+                    }
+                }
+            }
             let func = self.execute_expr(*callee)?;
             let args: Result <Vec <Value >, String > = arguments
                 .into_iter()
@@ -708,7 +785,7 @@ impl Interpreter {
         }
             Expr::Table { entries, line } => {
                 self.current_line = line;
-                let mut table: HashMap<usize, Value> = HashMap::new();
+                let mut table: IndexMap<usize, Value> = IndexMap::new();
                 for entry in entries {
                     let (key, value): (InternedString, Expr) = entry;
                     let val = self.execute_expr(value)?;
@@ -789,7 +866,7 @@ impl Interpreter {
                     params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
                     default_params: params.iter().map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
                     body,
-                    closure: Rc::new(RefCell::new(Environment::new())),
+                    closure: self.global.clone(),
                 })
             }
             Expr::Lambda { params, body, line } => {
@@ -809,7 +886,7 @@ impl Interpreter {
                     params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
                     default_params: params.iter().map(|(_, d)| d.clone()).collect(),
                     body,
-                    closure: Rc::new(RefCell::new(Environment::new())),
+                    closure: self.global.clone(),
                 })
             }
             Expr::GeneratorLiteral { params, body, line } => {
@@ -818,7 +895,7 @@ impl Interpreter {
                     name: 0,
                     params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
                     body,
-                    closure: Rc::new(RefCell::new(Environment::new())),
+                    closure: self.global.clone(),
                     state: Rc::new(RefCell::new(crate::value::GeneratorState::default())),
                 })
             }
@@ -884,7 +961,8 @@ impl Interpreter {
                 let module_path = resolve_module_path(&self.base_path, &path)
                     .ok_or_else(|| format!("Cannot require '{path}': module not found"))?;
                 
-                let module_key = module_path.to_string_lossy().to_string();
+                let canonical_path = std::fs::canonicalize(&module_path).unwrap_or(module_path.clone());
+                let module_key = canonical_path.to_string_lossy().to_string();
 
                 if let Some(cached) = self.module_cache.borrow().get(&module_key) {
                     return Ok(cached.clone());
@@ -926,18 +1004,21 @@ impl Interpreter {
             }
             Expr::Class { name: _, superclass, methods, line } => {
                 self.current_line = line;
-                let mut class_table: HashMap<usize, Value> = HashMap::new();
+                let mut class_table: IndexMap<usize, Value> = IndexMap::new();
                 for method_item in methods {
-                    let (method_name, method_expr): (InternedString, Expr) = method_item;
-                    if let Expr::FunctionLiteral { params, body, .. } = method_expr {
+                    let (member_name, member_expr): (InternedString, Expr) = method_item;
+                    if let Expr::FunctionLiteral { params, body, .. } = member_expr {
                         let method = Value::Function {
-                            name: method_name.id(),
+                            name: member_name.id(),
                             params: params.iter().map(|(p, _): &(InternedString, Option<Expr>)| p.id()).collect(),
                             default_params: params.iter().map(|(_, d): &(InternedString, Option<Expr>)| d.clone()).collect(),
                             body,
-                            closure: Rc::new(RefCell::new(Environment::new())),
+                            closure: self.global.clone(),
                         };
-                        class_table.insert(method_name.id(), method);
+                        class_table.insert(member_name.id(), method);
+                    } else {
+                        let val = self.execute_expr(member_expr)?;
+                        class_table.insert(member_name.id(), val);
                     }
                 }
                 let class_value = Value::Table(Rc::new(RefCell::new(class_table)));
@@ -966,7 +1047,7 @@ impl Interpreter {
                 Ok(Value::String(result))
             }
             Expr::This { line: _ } => {
-                Ok(Value::Nil)
+                Ok(self.this_stack.last().cloned().unwrap_or(Value::Nil))
             }
             Expr::Super { method, line: _ } => {
                 let _ = method;
@@ -974,7 +1055,7 @@ impl Interpreter {
             }
             Expr::Set { items, line } => {
                 self.current_line = line;
-                let mut set_table = HashMap::new();
+                let mut set_table = IndexMap::new();
                 for (i, item) in items.into_iter().enumerate() {
                     let val = self.execute_expr(item)?;
                     set_table.insert(i, val);
@@ -1175,7 +1256,7 @@ impl Interpreter {
                     function: "<native>".to_string(),
                     line: self.current_line,
                 });
-                let result = func(&args);
+                let result = func(&args, &mut self.interner);
                 self.call_stack.pop();
                 result
             }
@@ -1208,7 +1289,7 @@ impl Interpreter {
                     Ok(Value::Array(Rc::new(RefCell::new(smallvec))))
                 }
                 serde_json::Value::Object(obj) => {
-                    let mut map = HashMap::new();
+                    let mut map = IndexMap::new();
                     for (k, v) in obj {
                         let key_id = interner.intern(k);
                         map.insert(key_id, convert_json(v, depth + 1, interner)?);
@@ -1334,24 +1415,36 @@ impl Interpreter {
     fn instantiate_class(&mut self, class: Value, args: Vec<Value>) -> Result<Value, String> {
         match class {
             Value::Table(t) => {
-                let has_constructor = t.borrow().get(&0).is_some();
-                if has_constructor {
-                    let constructor = t.borrow().get(&0).cloned();
-                    if let Some(ctor) = constructor {
-                        self.call_function(ctor, args)
-                    } else {
-                        Ok(Value::Table(Rc::new(RefCell::new(HashMap::new()))))
+                // 1. Создаем пустой экземпляр (таблицу)
+                let instance = Value::new_table();
+                
+                // 2. Копируем все методы и поля из класса в экземпляр
+                if let Value::Table(ref inst_t) = instance {
+                    let class_ref = t.borrow();
+                    let mut inst_ref = inst_t.borrow_mut();
+                    for (k, v) in class_ref.iter() {
+                        inst_ref.insert(*k, v.clone());
                     }
-                } else {
-                    Ok(Value::Table(Rc::new(RefCell::new(HashMap::new()))))
                 }
+                
+                // 3. Ищем конструктор (метод с именем "init") и вызываем его
+                let init_id = self.interner.get_id("init").unwrap_or(usize::MAX);
+                if let Some(ctor) = t.borrow().get(&init_id).cloned() {
+                    self.this_stack.push(instance.clone());
+                    let _ = self.call_function(ctor, args);
+                    self.this_stack.pop();
+                }
+                
+                // 4. Возвращаем готовый экземпляр
+                Ok(instance)
             }
             _ => Err("Cannot instantiate non-class".to_string()),
         }
     }
 
 }
-use std::collections::HashMap;
+
+use indexmap::IndexMap;
 use crate::environment::Environment;
 
 // Tests

@@ -1,0 +1,7 @@
+function doSomething() {
+    let a = 10
+    let b = a + c // 'c' не определена!
+    return b
+}
+
+doSomething()

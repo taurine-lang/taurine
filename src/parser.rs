@@ -42,7 +42,7 @@ impl Parser {
         if self.match_token(&TokenKind::Async) {
             return self.async_declaration(line);
         }
-        if self.match_token(&TokenKind::Loc) || self.match_token(&TokenKind::Let) || self.match_token(&TokenKind::Const) {
+        if self.match_token(&TokenKind::Let) || self.match_token(&TokenKind::Const) {
             return self.variable_declaration(line);
         }
         if self.match_token(&TokenKind::Function) {
@@ -85,6 +85,7 @@ impl Parser {
         } else { None };
         self.consume(&TokenKind::LBrace, "Expected '{' before class body")?;
         let mut methods = Vec::new();
+        
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             if self.match_token(&TokenKind::Function) {
                 let method_name = self.consume_identifier()?;
@@ -113,12 +114,15 @@ impl Parser {
                 let field_name = self.intern(&self.previous().lexeme.clone());
                 self.consume(&TokenKind::Equal, "Expected '=' after field name")?;
                 let value = self.expression()?;
-                self.consume(&TokenKind::Comma, "Expected ',' or '}' after field")?;
+                // Делаем запятую или точку с запятой опциональными
+                self.match_token(&TokenKind::Comma);
+                self.match_token(&TokenKind::Semicolon);
                 methods.push((field_name, value));
             } else {
                 self.advance();
             }
         }
+        
         self.consume(&TokenKind::RBrace, "Expected '}' after class body")?;
         self.match_token(&TokenKind::Semicolon);
         Ok(Stmt::Class { name, superclass, methods, line })
@@ -126,13 +130,6 @@ impl Parser {
 
     fn variable_declaration(&mut self, line: usize) -> Result<Stmt, String> {
         let is_const = self.previous().kind == TokenKind::Const;
-        let is_loc = self.previous().kind == TokenKind::Loc;
-        
-        // Emit deprecation warning for 'loc'
-        if is_loc {
-            eprintln!("Warning: 'loc' is deprecated, use 'let' instead (line {})", line);
-        }
-        
         if self.match_token(&TokenKind::LBrace) {
             let mut names = Vec::new();
             loop {
@@ -154,7 +151,44 @@ impl Parser {
     }
 
     fn function_declaration(&mut self, line: usize) -> Result<Stmt, String> {
-        let name = self.consume_identifier()?;
+        let first_name = self.consume_identifier()?;
+
+        // === Поддержка синтаксиса function Namespace.method() ===
+        if self.match_token(&TokenKind::Dot) {
+            let method_name = self.consume_identifier()?;
+            self.consume(&TokenKind::LParen, "Expected '(' after method name")?;
+            let mut params = Vec::new();
+            if !self.check(&TokenKind::RParen) {
+                loop {
+                    let param_name = self.consume_identifier()?;
+                    let default = if self.match_token(&TokenKind::Equal) {
+                        Some(self.expression()?)
+                    } else { None };
+                    params.push((param_name, default));
+                    if !self.match_token(&TokenKind::Comma) { break; }
+                }
+            }
+            self.consume(&TokenKind::RParen, "Expected ')' after parameters")?;
+            self.consume(&TokenKind::LBrace, "Expected '{' before function body")?;
+            let body = self.block()?;
+            self.consume(&TokenKind::RBrace, "Expected '}' after function body")?;
+
+            let func_expr = Expr::FunctionLiteral {
+                params,
+                body,
+                line,
+            };
+
+            let target_obj = Expr::Identifier(first_name);
+            return Ok(Stmt::Expression(Expr::SetProperty {
+                object: Box::new(target_obj),
+                name: method_name,
+                value: Box::new(func_expr),
+                line,
+            }));
+        }
+        // === КОНЕЦ НОВОГО КОДА ===
+
         self.consume(&TokenKind::LParen, "Expected '(' after function name")?;
         let mut params = Vec::new();
         if !self.check(&TokenKind::RParen) {
@@ -171,13 +205,11 @@ impl Parser {
         self.consume(&TokenKind::LBrace, "Expected '{' before function body")?;
         let body = self.block()?;
         self.consume(&TokenKind::RBrace, "Expected '}' after function body")?;
-        Ok(Stmt::Function { name, params, body, line })
+        Ok(Stmt::Function { name: first_name, params, body, line })
     }
 
     fn async_declaration(&mut self, line: usize) -> Result<Stmt, String> {
-        // Check if it's async function or just async identifier
         if !self.match_token(&TokenKind::Function) {
-            // It's just `async` as a variable name, backtrack
             return Err("Expected 'function' after 'async'".to_string());
         }
         let name = self.consume_identifier()?;
@@ -279,7 +311,7 @@ impl Parser {
             }
         }
         let has_parens = self.match_token(&TokenKind::LParen);
-        let initializer = if self.check(&TokenKind::Let) || self.check(&TokenKind::Const) || self.check(&TokenKind::Loc) {
+        let initializer = if self.check(&TokenKind::Let) || self.check(&TokenKind::Const) {
             self.advance();
             let name = self.consume_identifier()?;
             self.consume(&TokenKind::Equal, "Expected '=' in for initializer")?;
@@ -427,7 +459,7 @@ impl Parser {
     fn factor(&mut self) -> Result<Expr, String> {
         let line = self.peek().line;
         let mut left = self.unary()?;
-            while self.match_token(&TokenKind::Star) || self.match_token(&TokenKind::Slash) || self.match_token(&TokenKind::Percent) {
+        while self.match_token(&TokenKind::Star) || self.match_token(&TokenKind::Slash) || self.match_token(&TokenKind::Percent) {
             let op = self.previous().kind.clone();
             let right = self.unary()?;
             left = Expr::Binary { left: Box::new(left), op, right: Box::new(right), line };
@@ -550,35 +582,33 @@ impl Parser {
             return Ok(Expr::Number(num));
         }
         if self.match_token(&TokenKind::FString) { return self.fstring_literal(line); }
-        if self.match_token( &TokenKind::String) {
-        let s = self.previous().lexeme.clone();
-        let raw = &s[1..s.len()-1];
-        let mut result = String::new();
-        let mut chars = raw.chars().peekable();
-        while let Some(c) = chars.next() {
-            if c == '\\' {
-                if let Some(&next) = chars.peek() {
-                    match next {
-                        'n' => { chars.next(); result.push('\n'); }
-                        't' => { chars.next(); result.push('\t'); }
-                        'r' => { chars.next(); result.push('\r'); }
-                        '"' => { chars.next(); result.push('"'); }
-                        '\'' => { chars.next(); result.push('\''); }
-                        '\\' => { chars.next(); result.push('\\'); }
-                        _ => result.push(c),
+        if self.match_token(&TokenKind::String) {
+            let s = self.previous().lexeme.clone();
+            let raw = &s[1..s.len()-1];
+            let mut result = String::new();
+            let mut chars = raw.chars().peekable();
+            while let Some(c) = chars.next() {
+                if c == '\\' {
+                    if let Some(&next) = chars.peek() {
+                        match next {
+                            'n' => { chars.next(); result.push('\n'); }
+                            't' => { chars.next(); result.push('\t'); }
+                            'r' => { chars.next(); result.push('\r'); }
+                            '"' => { chars.next(); result.push('"'); }
+                            '\'' => { chars.next(); result.push('\''); }
+                            '\\' => { chars.next(); result.push('\\'); }
+                            _ => result.push(c),
+                        }
+                    } else {
+                        result.push(c);
                     }
                 } else {
                     result.push(c);
                 }
-            } else {
-                result.push(c);
             }
+            return Ok(Expr::String(result));
         }
-        return Ok(Expr::String(result));
-    }
         if self.match_token(&TokenKind::Await) {
-            // Await should parse the next primary expression (typically a function call or identifier)
-            // We use a loop to skip any nested awaits and get to the actual expression
             while self.check(&TokenKind::Await) {
                 self.advance();
             }
@@ -602,14 +632,14 @@ impl Parser {
         }
         if self.match_token(&TokenKind::LBracket) { return self.array_literal(line); }
         if self.check(&TokenKind::LParen) {
-        if self.check_lambda() { 
-            self.advance(); // consume LParen
-            return self.lambda_literal(line); 
-        }
-        self.advance(); // consume LParen
-        let expr = self.expression()?;
-        self.consume(&TokenKind::RParen, "Expected ')' after expression")?;
-        return Ok(expr);
+            if self.check_lambda() {
+                self.advance();
+                return self.lambda_literal(line);
+            }
+            self.advance();
+            let expr = self.expression()?;
+            self.consume(&TokenKind::RParen, "Expected ')' after expression")?;
+            return Ok(expr);
         }
         if self.match_token(&TokenKind::Identifier) {
             let param_lexeme = self.previous().lexeme.clone();
@@ -780,6 +810,7 @@ impl Parser {
         if self.match_token(kind) { return Ok(()); }
         Err(format!("{} at line {}", message, self.peek().line))
     }
+
     pub fn take_interner(&mut self) -> Option<StringInterner> {
         self.interner.take()
     }

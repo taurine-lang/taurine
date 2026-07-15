@@ -1,5 +1,5 @@
 //! Environment management
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use crate::value::Value;
@@ -7,39 +7,30 @@ use crate::string_intern::InternedString;
 
 #[derive(Clone, Debug)]
 pub struct Environment {
-    pub values: Rc<RefCell<HashMap<usize, Value>>>,
-    parent: Option<Weak<RefCell<Environment>>>, // Изменено на Weak
-    constants: Rc<RefCell<HashMap<usize, ()>>>,
+    pub values: Rc<RefCell<IndexMap<usize, Value>>>,
+    parent: Option<Weak<RefCell<Environment>>>,
+    constants: Rc<RefCell<IndexMap<usize, ()>>>,
 }
 
 impl Environment {
     pub fn new() -> Self {
         Self {
-            values: Rc::new(RefCell::new(HashMap::new())),
+            values: Rc::new(RefCell::new(IndexMap::new())),
             parent: None,
-            constants: Rc::new(RefCell::new(HashMap::new())),
+            constants: Rc::new(RefCell::new(IndexMap::new())),
         }
     }
 
     pub fn with_parent(parent: Rc<RefCell<Environment>>) -> Self {
         Self {
-            values: Rc::new(RefCell::new(HashMap::new())),
-            parent: Some(Rc::downgrade(&parent)), // Создаем Weak ссылку
-            constants: Rc::new(RefCell::new(HashMap::new())),
+            values: Rc::new(RefCell::new(IndexMap::new())),
+            parent: Some(Rc::downgrade(&parent)),
+            constants: Rc::new(RefCell::new(IndexMap::new())),
         }
     }
 
     pub fn define(&mut self, name: InternedString, value: Value) {
         self.values.borrow_mut().insert(name.id(), value);
-    }
-
-    pub fn define_with_name(&mut self, name: &str, value: Value) {
-        use std::hash::{Hash, Hasher};
-        use std::collections::hash_map::DefaultHasher;
-        let mut hasher = DefaultHasher::new();
-        name.hash(&mut hasher);
-        let id = hasher.finish() as usize;
-        self.values.borrow_mut().insert(id, value);
     }
 
     pub fn define_const(&mut self, name: InternedString, value: Value) {
@@ -69,24 +60,6 @@ impl Environment {
             }
         }
         Err(format!("Undefined variable: {}", name.id()))
-    }
-
-    pub fn get_by_name(&self, name: &str) -> Result<Value, String> {
-        use std::hash::{Hash, Hasher};
-        use std::collections::hash_map::DefaultHasher;
-        let mut hasher = DefaultHasher::new();
-        name.hash(&mut hasher);
-        let id = hasher.finish() as usize;
-
-        if let Some(value) = self.values.borrow().get(&id) {
-            return Ok(value.clone());
-        }
-        if let Some(weak_parent) = &self.parent {
-            if let Some(parent) = weak_parent.upgrade() {
-                return parent.borrow().get_by_name(name);
-            }
-        }
-        Err(format!("Undefined variable: {name}"))
     }
 
     pub fn assign(&mut self, name: &InternedString, value: Value) -> Result<(), String> {

@@ -8,8 +8,6 @@ pub enum TokenKind {
     Let,
     #[token("const")]
     Const,
-    #[token("loc")]
-    Loc,  // Deprecated: use 'let' instead
     #[token("function")]
     Function,
     #[token("if")]
@@ -246,17 +244,16 @@ mod tests {
 
     #[test]
     fn test_tokenize_keywords() {
-        let tokens = tokenize("let const loc function if else return true false nil");
+        let tokens = tokenize("let const function if else return true false nil");
         assert_eq!(tokens[0].kind, TokenKind::Let);
         assert_eq!(tokens[1].kind, TokenKind::Const);
-        assert_eq!(tokens[2].kind, TokenKind::Loc);
-        assert_eq!(tokens[3].kind, TokenKind::Function);
-        assert_eq!(tokens[4].kind, TokenKind::If);
-        assert_eq!(tokens[5].kind, TokenKind::Else);
-        assert_eq!(tokens[6].kind, TokenKind::Return);
-        assert_eq!(tokens[7].kind, TokenKind::True);
-        assert_eq!(tokens[8].kind, TokenKind::False);
-        assert_eq!(tokens[9].kind, TokenKind::Nil);
+        assert_eq!(tokens[2].kind, TokenKind::Function);
+        assert_eq!(tokens[3].kind, TokenKind::If);
+        assert_eq!(tokens[4].kind, TokenKind::Else);
+        assert_eq!(tokens[5].kind, TokenKind::Return);
+        assert_eq!(tokens[6].kind, TokenKind::True);
+        assert_eq!(tokens[7].kind, TokenKind::False);
+        assert_eq!(tokens[8].kind, TokenKind::Nil);
     }
 
     #[test]

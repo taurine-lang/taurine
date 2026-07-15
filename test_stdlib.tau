@@ -1,0 +1,27 @@
+print("=== Тест стандартной библиотеки ===")
+
+// 1. Math
+print("PI: " + tostring(PI))
+print("sqrt(144) = " + tostring(sqrt(144)))
+print("max(10, 20) = " + tostring(max(10, 20)))
+
+// 2. String
+print("Upper: " + upper("hello taurine"))
+print("Trim: '" + trim("   test   ") + "'")
+
+// 3. Array
+let arr = [1, 2, 3, 4, 5]
+let doubled = map(arr, x => x * 2)
+print("Array x2: " + tostring(doubled))
+
+// 4. JSON
+let obj = { name: "Taurine", version: 2.0 }
+let json_str = stringify(obj)
+print("JSON: " + json_str)
+
+// 5. Кастомный модуль
+io_write("my_custom.tau", "function greet(name) { return 'Привет, ' + name + '!' }")
+import "my_custom.tau" as my_mod
+print(my_mod.greet("ffsonDev"))
+
+print("=== Тест завершен ===")
