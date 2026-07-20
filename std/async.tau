@@ -1,106 +1,37 @@
-// std/async.tau - Async/await utilities for Taurine
-
-import "std/array.tau" as array
-
-// ============================================
-// Future/Promise implementation
-// ============================================
-
-let Future = {}
-
-function Future.new(value) {
-    let self = {
-        _state: "ready",
-        _value: value,
-        _callbacks: []
-    }
-    return self
+function sleep(ms) {
+    async_sleep(ms)
 }
 
-function Future.then(self, callback) {
-    if self._state == "ready" {
-        let result = callback(self._value)
-        return Future.new(result)
-    }
-    array.push(self._callbacks, callback)
-    return self
+function sleepSecs(secs) {
+    async_sleep(secs * 1000)
 }
 
-function Future.catch(self, callback) {
-    if self._state == "error" {
-        let result = callback(self._value)
-        return Future.new(result)
-    }
-    return self
+function resolve(value) {
+    return value
 }
 
-function Future.isReady(self) {
-    return self._state == "ready"
+function reject(error) {
+    throw error
 }
 
-function Future.getValue(self) {
-    return self._value
-}
-
-// ============================================
-// Async helper functions
-// ============================================
-
-async function sleep(ms) {
-    // Uses native sleep if available
-    let start = os.time()
-    while (os.time() - start) * 1000 < ms {
-        // Busy wait for now
-    }
-    return Future.new(nil)
-}
-
-async function sleepSecs(secs) {
-    return sleep(secs * 1000)
-}
-
-// ============================================
-// Concurrent execution helpers
-// ============================================
-
-function Future.all(futures) {
+function all(futures) {
     let results = []
-    for i, f in futures {
-        if f._state == "ready" {
-            results[i] = f._value
-        } else {
-            return Future.new(nil) // Not all ready yet
-        }
-    }
-    return Future.new(results)
-}
-
-function Future.race(futures) {
     for f in futures {
-        if f._state == "ready" {
-            return Future.new(f._value)
-        }
+        io_arraypush(results, f)
     }
-    return Future.new(nil)
+    return results
 }
 
-function Future.resolve(value) {
-    return Future.new(value)
+function race(futures) {
+    if #futures > 0 {
+        return futures[0]
+    }
+    return nil
 }
-
-function Future.reject(error) {
-    let f = Future.new(error)
-    f._state = "error"
-    return f
-}
-
-// ============================================
-// Generator utilities
-// ============================================
 
 generator range(start, end, step) {
     let current = start
-    let s = step != nil ? step : 1
+    let s = step ?? 1
     while current < end {
         yield current
         current = current + s
@@ -115,121 +46,67 @@ generator repeat(value, times) {
     }
 }
 
-generator iteratePairs(table) {
-    // Iterate over table key-value pairs
-    yield table
-}
-
-// ============================================
-// Async flow control
-// ============================================
-
-async function retry(fn, maxAttempts, delay) {
+function retry(fn, maxAttempts, delayMs) {
     let attempts = 0
     let lastError = nil
     while attempts < maxAttempts {
         attempts = attempts + 1
         try {
-            let result = fn()
-            return result
+            return fn()
         } catch (err) {
             lastError = err
             if attempts < maxAttempts {
-                await sleep(delay)
+                async_sleep(delayMs)
             }
         }
     }
-    throw "Failed after " + attempts + " attempts: " + lastError
+    throw "Failed after " + tostring(attempts) + " attempts: " + tostring(lastError)
 }
 
-async function parallel(...) {
-    let functions = [...]
+function parallel(functions) {
     let results = []
-    for i, fn in functions {
-        results[i] = fn()
+    for fn in functions {
+        io_arraypush(results, fn())
     }
     return results
 }
 
-async function series(...) {
-    let functions = [...]
+function series(functions) {
     let results = []
-    for i, fn in functions {
-        let result = fn()
-        array.push(results, result)
+    for fn in functions {
+        io_arraypush(results, fn())
     }
     return results
 }
 
-async function withTimeout(fn, timeoutMs) {
-    let start = os.time()
+function withTimeout(fn, timeoutMs) {
+    let start = io_time()
     let result = fn()
-    let elapsed = (os.time() - start) * 1000
+    let elapsed = (io_time() - start) * 1000
     if elapsed > timeoutMs {
-        return nil, "Timeout"
+        return nil
     }
     return result
 }
 
-async function delay(fn, ms) {
-    await sleep(ms)
-    return fn()
-}
-
-async function sequence(functions, delayMs) {
-    let results = []
-    for fn in functions {
-        let result = fn()
-        array.push(results, result)
-        if delayMs != nil {
-            await sleep(delayMs)
-        }
-    }
-    return results
-}
-
-// ============================================
-// Debounce and Throttle
-// ============================================
-
-function debounce(fn, delay) {
+function debounce(fn, delayMs) {
     let lastCall = 0
     return function(...) {
-        let now = os.time() * 1000
-        if now - lastCall >= delay {
+        let now = io_time() * 1000
+        if now - lastCall >= delayMs {
             lastCall = now
             return fn(...)
         }
     }
 }
 
-function throttle(fn, limit) {
+function throttle(fn, limitMs) {
     let lastCall = 0
     return function(...) {
-        let now = os.time() * 1000
-        if now - lastCall >= limit {
+        let now = io_time() * 1000
+        if now - lastCall >= limitMs {
             lastCall = now
             return fn(...)
         }
     }
-}
-
-// ============================================
-// Exports
-// ============================================
-
-return {
-    Future: Future,
-    sleep: sleep,
-    sleepSecs: sleepSecs,
-    retry: retry,
-    parallel: parallel,
-    series: series,
-    withTimeout: withTimeout,
-    delay: delay,
-    sequence: sequence,
-    debounce: debounce,
-    throttle: throttle,
-    range: range,
-    repeat: repeat,
 }

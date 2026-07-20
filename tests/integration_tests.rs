@@ -63,7 +63,7 @@ fn test_loops() {
 #[test]
 fn test_json() {
     assert!(run_code(r#"
-        let data = json_parse('{"name": "test", "value": 42}')
+        let data = json_parse("{\"name\": \"test\", \"value\": 42}")
         print(data.name)
     "#).is_ok());
 }

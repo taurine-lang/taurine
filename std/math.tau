@@ -1,13 +1,7 @@
-// std/math.tau — Полная математическая библиотека
-
 let PI = 3.141592653589793
 let E = 2.718281828459045
-let PHI = 1.618033988749895
 let TAU = 6.283185307179586
 let SQRT2 = 1.414213562373095
-let SQRT3 = 1.732050807568877
-let LN2 = 0.693147180559945
-let LN10 = 2.302585092994046
 
 function abs(x) {
     if x < 0 { return -x }
@@ -84,115 +78,60 @@ function sqrt(x) {
     return guess
 }
 
-function cbrt(x) {
-    if x == 0 { return 0 }
-    let guess = x / 3
-    let i = 0
-    while i < 100 {
-        guess = (2 * guess + x / (guess * guess)) / 3
-        i = i + 1
-    }
-    return guess
-}
-
 function pow(base, exp) {
     if exp == 0 { return 1 }
     if exp < 0 { return 1 / pow(base, -exp) }
-    if exp == floor(exp) {
-        let result = 1
-        let i = 0
-        while i < exp {
-            result = result * base
-            i = i + 1
-        }
-        return result
-    }
-    return E * (exp * log(base))
-}
-
-function exp(x) {
-    return E * x
-}
-
-function log(x) {
-    if x <= 0 { throw "log() requires positive number" }
-    let result = 0
-    let k = 1
-    while k < 20 {
-        result = result + 2 * ((x - 1) / (x + 1)) * pow((x - 1) / (x + 1), 2 * k - 1) / (2 * k - 1)
-        k = k + 1
+    let result = 1
+    let i = 0
+    while i < exp {
+        result = result * base
+        i = i + 1
     }
     return result
 }
 
-function log10(x) {
-    return log(x) / log(10)
-}
-
-function log2(x) {
-    return log(x) / log(2)
-}
-
 function sin(x) {
+    let reduced = x
+    while reduced > PI {
+        reduced = reduced - TAU
+    }
+    while reduced < -PI {
+        reduced = reduced + TAU
+    }
     let result = 0
-    let term = x
+    let term = reduced
     let n = 1
     while n < 20 {
         result = result + term
-        term = -term * x * x / ((2 * n) * (2 * n + 1))
+        term = -term * reduced * reduced / ((2 * n) * (2 * n + 1))
         n = n + 1
     }
     return result
 }
 
 function cos(x) {
+    let reduced = x
+    while reduced > PI {
+        reduced = reduced - TAU
+    }
+    while reduced < -PI {
+        reduced = reduced + TAU
+    }
     let result = 0
     let term = 1
     let n = 0
     while n < 20 {
         result = result + term
-        term = -term * x * x / ((2 * n + 1) * (2 * n + 2))
+        term = -term * reduced * reduced / ((2 * n + 1) * (2 * n + 2))
         n = n + 1
     }
     return result
 }
 
 function tan(x) {
-    return sin(x) / cos(x)
-}
-
-function asin(x) {
-    if abs(x) > 1 { throw "asin() requires |x| <= 1" }
-    return x + (x * x * x) / 6
-}
-
-function acos(x) {
-    return PI / 2 - asin(x)
-}
-
-function atan(x) {
-    return x - (x * x * x) / 3 + (x * x * x * x * x) / 5
-}
-
-function atan2(y, x) {
-    if x > 0 { return atan(y / x) }
-    if x < 0 and y >= 0 { return atan(y / x) + PI }
-    if x < 0 and y < 0 { return atan(y / x) - PI }
-    if x == 0 and y > 0 { return PI / 2 }
-    if x == 0 and y < 0 { return -PI / 2 }
-    return 0
-}
-
-function sinh(x) {
-    return (exp(x) - exp(-x)) / 2
-}
-
-function cosh(x) {
-    return (exp(x) + exp(-x)) / 2
-}
-
-function tanh(x) {
-    return sinh(x) / cosh(x)
+    let c = cos(x)
+    if c == 0 { throw "tan() undefined at this point" }
+    return sin(x) / c
 }
 
 function deg2rad(deg) {
@@ -209,7 +148,7 @@ function gcd(a, b) {
         b = a % b
         a = t
     }
-    return a
+    return abs(a)
 }
 
 function lcm(a, b) {
@@ -240,18 +179,16 @@ function isPrime(n) {
     return true
 }
 
-function random() {
-    return io_random()
-}
-
-function randomRange(min, max) {
-    return min + random() * (max - min)
-}
-
-function randomInt(min, max) {
-    return floor(randomRange(min, max + 1))
-}
-
-function seed(s) {
-    io_seed(s)
+function fib(n) {
+    if n <= 1 { return n }
+    let a = 0
+    let b = 1
+    let i = 2
+    while i <= n {
+        let temp = a + b
+        a = b
+        b = temp
+        i = i + 1
+    }
+    return b
 }

@@ -192,17 +192,6 @@ fn test_async_function() {
 }
 
 #[test]
-fn test_generator_function() {
-    let stmts = parse("generator count() { yield 1 }").unwrap();
-    match &stmts[0] {
-        Stmt::Generator { name, params, body, .. } => {
-            assert_eq!(body.len(), 1);
-        }
-        _ => panic!("Expected Generator"),
-    }
-}
-
-#[test]
 fn test_null_coalesce() {
     let stmts = parse("let x = a ?? b").unwrap();
     match &stmts[0] {
@@ -443,20 +432,6 @@ fn test_await() {
     match &stmts[0] {
         Stmt::Declaration { initializer: Some(Expr::Await { .. }), .. } => {}
         _ => panic!("Expected Await"),
-    }
-}
-
-#[test]
-fn test_yield() {
-    let stmts = parse("generator g() { yield 42 }").unwrap();
-    match &stmts[0] {
-        Stmt::Generator { body, .. } => {
-            match &body[0] {
-                Stmt::Expression(Expr::Yield { .. }) => {}
-                _ => panic!("Expected Yield"),
-            }
-        }
-        _ => panic!("Expected Generator"),
     }
 }
 

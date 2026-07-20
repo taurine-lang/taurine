@@ -64,12 +64,44 @@ impl fmt::Debug for Value {
     }
 }
 
-/// Generator execution state
-#[derive(Clone, Debug, Default)]
+/// Generator execution state with lazy evaluation support
+#[derive(Clone, Debug)]
 pub struct GeneratorState {
+    /// Values that have been yielded so far
     pub yielded_values: Vec<Value>,
+    /// Index of next value to consume
     pub consumed_index: usize,
+    /// Whether the generator has finished execution
     pub is_done: bool,
+    /// Current execution state for lazy evaluation
+    pub execution_state: GeneratorExecutionState,
+}
+
+/// Execution state for lazy generator evaluation
+#[derive(Clone, Debug)]
+pub enum GeneratorExecutionState {
+    /// Generator hasn't started yet
+    NotStarted,
+    /// Generator is currently suspended at a yield point
+    Suspended {
+        /// Remaining statements to execute
+        remaining_body: Vec<crate::ast::Stmt>,
+        /// Current environment/closure
+        closure: std::rc::Rc<std::cell::RefCell<crate::environment::Environment>>,
+    },
+    /// Generator has completed
+    Finished,
+}
+
+impl Default for GeneratorState {
+    fn default() -> Self {
+        Self {
+            yielded_values: Vec::new(),
+            consumed_index: 0,
+            is_done: false,
+            execution_state: GeneratorExecutionState::NotStarted,
+        }
+    }
 }
 
 /// Future state for async/await

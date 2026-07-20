@@ -53,6 +53,7 @@ pub fn register_builtins(global: &Rc<RefCell<crate::environment::Environment>>) 
     register_crypto_functions(global);
     register_date_functions(global);
     register_regex_functions(global);
+    register_async_functions(global);
 }
 
 
@@ -731,6 +732,26 @@ fn register_date_functions(global: &Rc<RefCell<crate::environment::Environment>>
         let formatted = datetime.format(&format).to_string();
         Ok(Value::String(formatted))
     });
+}
+
+fn register_async_functions(global: &Rc<RefCell<crate::environment::Environment>>) {
+    let async_sleep_fn = Rc::new(|args: &[Value], _int: &mut crate::string_intern::StringInterner| -> Result<Value, String> {
+        if args.is_empty() { return Err("async_sleep() requires 1 argument".to_string()); }
+        match &args[0] {
+            Value::Number(ms) => {
+                std::thread::sleep(std::time::Duration::from_millis(*ms as u64));
+                Ok(Value::Nil)
+            }
+            _ => Err("async_sleep() requires number of milliseconds".to_string())
+        }
+    });
+    global.borrow_mut().define(intern_builtin(100), Value::NativeFunction(async_sleep_fn));
+
+    let async_spawn_fn = Rc::new(|args: &[Value], _int: &mut crate::string_intern::StringInterner| -> Result<Value, String> {
+        if args.is_empty() { return Err("async_spawn() requires 1 argument".to_string()); }
+        Ok(Value::Nil)
+    });
+    global.borrow_mut().define(intern_builtin(101), Value::NativeFunction(async_spawn_fn));
 }
 
 // Regex Functions

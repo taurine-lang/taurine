@@ -1,30 +1,30 @@
 [package]
 name = "taurine"
-version = "2.13.0"
+version = "2.14.0"
 edition = "2021"
 authors = ["ffsonDev"]
 description = "Fast, embeddable scripting language implemented in Rust"
 license = "MIT"
 repository = "https://github.com/ffsonDev/taurine"
 keywords = ["language", "scripting", "interpreter", "rust"]
-categories = ["command-line-utilities", "development-tools"]
+categories = ["programming-languages", "parser-implementations"]
 
 [dependencies]
 logos = "0.14"
 clap = { version = "4.4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-reqwest = { version = "0.11", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }
 regex = { version = "1.10", optional = true }
 chrono = { version = "0.4", optional = true }
-md5 = { version = "0.7", optional = true }
+md5 = { version = "0.8", optional = true }
 sha2 = { version = "0.10", optional = true }
 base64 = { version = "0.21", optional = true }
 uuid = { version = "1.6", features = ["v4"], optional = true }
 typed-arena = "2.0"
 smallvec = { version = "1.11", features = ["union"] }
 twox-hash = "1.6"
-thiserror = "1.0"
+thiserror = "2.0"
 dirs = "5.0"
 indexmap = "2.2"
 

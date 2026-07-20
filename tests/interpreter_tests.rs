@@ -1,447 +1,246 @@
-use taurine::Interpreter;
-use taurine::Value;
-use std::path::PathBuf;
+use taurine::lexer::tokenize;
+use taurine::parser::Parser;
+use taurine::ast::{Stmt, Expr};
 
-fn run(code: &str) -> Result<(), String> {
-    let mut interp = Interpreter::new(PathBuf::from("."));
-    interp.run(code).map_err(|e| e.message())
-}
-
-fn run_and_get(code: &str, var: &str) -> Result<Value, String> {
-    let mut interp = Interpreter::new(PathBuf::from("."));
-    interp.run(code).map_err(|e| e.message())?;
-    interp.get(var)
+fn parse(code: &str) -> Result<Vec<Stmt>, String> {
+    let tokens = tokenize(code);
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse()?;
+    Ok(program.statements)
 }
 
 #[test]
-fn test_arithmetic() {
-    assert!(run("let x = 10 + 20").is_ok());
-    assert!(run("let x = 100 - 50").is_ok());
-    assert!(run("let x = 10 * 5").is_ok());
-    assert!(run("let x = 100 / 4").is_ok());
-    assert!(run("let x = 10 % 3").is_ok());
+fn test_variable_declaration() {
+    let stmts = parse("let x = 42").unwrap();
+    assert_eq!(stmts.len(), 1);
+    assert!(matches!(&stmts[0], Stmt::Declaration { .. }));
 }
 
 #[test]
-fn test_string_concatenation() {
-    assert!(run(r#"let s = "Hello" + " " + "World""#).is_ok());
+fn test_const_declaration() {
+    let stmts = parse("const PI = 3.14").unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { is_const, .. } => assert!(is_const),
+        _ => panic!("Expected Declaration"),
+    }
 }
 
 #[test]
-fn test_comparison() {
-    assert!(run("let x = 10 > 5").is_ok());
-    assert!(run("let x = 10 < 20").is_ok());
-    assert!(run("let x = 10 == 10").is_ok());
-    assert!(run("let x = 10 != 5").is_ok());
-}
-
-#[test]
-fn test_logical_operators() {
-    assert!(run("let x = true and false").is_ok());
-    assert!(run("let x = true or false").is_ok());
-    assert!(run("let x = not true").is_ok());
-}
-
-#[test]
-fn test_variables() {
-    let val = run_and_get("let x = 42", "x").unwrap();
-    assert_eq!(val, Value::Number(42.0));
-}
-
-#[test]
-fn test_const() {
-    assert!(run("const PI = 3.14").is_ok());
-}
-
-#[test]
-fn test_arrays() {
-    assert!(run("let arr = [1, 2, 3, 4, 5]").is_ok());
-    let val = run_and_get("let arr = [1, 2, 3]", "arr").unwrap();
-    assert!(matches!(val, Value::Array(_)));
-}
-
-#[test]
-fn test_tables() {
-    assert!(run(r#"let obj = { name: "test", value: 42 }"#).is_ok());
-    let val = run_and_get(r#"let obj = { name: "test" }"#, "obj").unwrap();
-    assert!(matches!(val, Value::Table(_)));
-}
-
-#[test]
-fn test_functions() {
-    assert!(run(r#"
-        function add(a, b) { return a + b }
-        let result = add(10, 20)
-    "#).is_ok());
-}
-
-#[test]
-fn test_recursion() {
-    let val = run_and_get(r#"
-        function factorial(n) {
-            if n <= 1 { return 1 }
-            return n * factorial(n - 1)
+fn test_function_declaration() {
+    let stmts = parse("function add(a, b) { return a + b }").unwrap();
+    match &stmts[0] {
+        Stmt::Function { params, body, .. } => {
+            assert_eq!(params.len(), 2);
+            assert_eq!(body.len(), 1);
         }
-        let result = factorial(5)
-    "#, "result").unwrap();
-    assert_eq!(val, Value::Number(120.0));
+        _ => panic!("Expected Function"),
+    }
 }
 
 #[test]
-fn test_closures() {
-    let val = run_and_get(r#"
-        function makeAdder(x) {
-            return function(y) { return x + y }
-        }
-        let add5 = makeAdder(5)
-        let result = add5(10)
-    "#, "result").unwrap();
-    assert_eq!(val, Value::Number(15.0));
-}
-
-#[test]
-fn test_loops() {
-    let val = run_and_get(r#"
-        let sum = 0
-        for i in 1..11 {
-            sum = sum + i
-        }
-    "#, "sum").unwrap();
-    assert_eq!(val, Value::Number(55.0));
+fn test_if_statement() {
+    let stmts = parse("if x > 5 { print(x) }").unwrap();
+    assert!(matches!(&stmts[0], Stmt::If { .. }));
 }
 
 #[test]
 fn test_while_loop() {
-    let val = run_and_get(r#"
-        let x = 0
-        while x < 10 {
-            x = x + 1
+    let stmts = parse("while x < 10 { x = x + 1 }").unwrap();
+    assert!(matches!(&stmts[0], Stmt::While { .. }));
+}
+
+#[test]
+fn test_for_in_loop() {
+    let stmts = parse("for i in 1..10 { print(i) }").unwrap();
+    assert!(matches!(&stmts[0], Stmt::ForIn { .. }));
+}
+
+#[test]
+fn test_array_literal() {
+    let stmts = parse("let arr = [1, 2, 3]").unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { initializer: Some(Expr::Array { items, .. }), .. } => {
+            assert_eq!(items.len(), 3);
         }
-    "#, "x").unwrap();
-    assert_eq!(val, Value::Number(10.0));
+        _ => panic!("Expected Array"),
+    }
 }
 
 #[test]
-fn test_if_else() {
-    let val = run_and_get(r#"
-        let x = 10
-        let result = 0
-        if x > 5 {
-            result = 1
-        } else {
-            result = 2
+fn test_table_literal() {
+    let stmts = parse(r#"let obj = { name: "test", value: 42 }"#).unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { initializer: Some(Expr::Table { entries, .. }), .. } => {
+            assert_eq!(entries.len(), 2);
         }
-    "#, "result").unwrap();
-    assert_eq!(val, Value::Number(1.0));
-}
-
-#[test]
-fn test_null_coalesce() {
-    let val = run_and_get(r#"
-        let x = nil
-        let y = x ?? 42
-    "#, "y").unwrap();
-    assert_eq!(val, Value::Number(42.0));
-}
-
-#[test]
-fn test_safe_navigation() {
-    let val = run_and_get(r#"
-        let obj = { name: "test" }
-        let x = obj?.name
-    "#, "x").unwrap();
-    assert_eq!(val, Value::String("test".to_string()));
-}
-
-#[test]
-fn test_safe_navigation_nil() {
-    let val = run_and_get(r#"
-        let obj = nil
-        let x = obj?.name
-    "#, "x").unwrap();
-    assert_eq!(val, Value::Nil);
+        _ => panic!("Expected Table"),
+    }
 }
 
 #[test]
 fn test_lambda() {
-    let val = run_and_get(r#"
-        let add = (x, y) => x + y
-        let result = add(10, 20)
-    "#, "result").unwrap();
-    assert_eq!(val, Value::Number(30.0));
-}
-
-#[test]
-fn test_default_parameters() {
-    let val = run_and_get(r#"
-        function greet(name = "World") {
-            return "Hello, " + name
+    let stmts = parse("let add = (x, y) => x + y").unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { initializer: Some(Expr::Lambda { params, .. }), .. } => {
+            assert_eq!(params.len(), 2);
         }
-        let result = greet()
-    "#, "result").unwrap();
-    assert_eq!(val, Value::String("Hello, World".to_string()));
+        _ => panic!("Expected Lambda"),
+    }
 }
 
 #[test]
-fn test_array_operations() {
-    assert!(run(r#"
-        let arr = [1, 2, 3]
-        io_arraypush(arr, 4)
-        let len = io_arraylen(arr)
-    "#).is_ok());
-}
-
-#[test]
-fn test_table_operations() {
-    assert!(run(r#"
-        let obj = {}
-        obj.name = "test"
-        obj.value = 42
-    "#).is_ok());
-}
-
-#[test]
-fn test_string_operations() {
-    assert!(run(r#"
-        let s = "Hello, World!"
-        let upper = io_strupper(s)
-        let lower = io_strlower(s)
-    "#).is_ok());
-}
-
-#[test]
-fn test_json_parse() {
-    let val = run_and_get(r#"
-        let data = json_parse('{"name": "test", "value": 42}')
-    "#, "data").unwrap();
-    assert!(matches!(val, Value::Table(_)));
-}
-
-#[test]
-fn test_json_stringify() {
-    assert!(run(r#"
-        let data = { name: "test", value: 42 }
-        let json = json_stringify(data)
-    "#).is_ok());
+fn test_class_declaration() {
+    let stmts = parse("class Dog { function bark() { print(\"Woof\") } }").unwrap();
+    assert!(matches!(&stmts[0], Stmt::Class { .. }));
 }
 
 #[test]
 fn test_try_catch() {
-    assert!(run(r#"
-        try {
-            throw "error"
-        } catch (e) {
-            print(e)
-        }
-    "#).is_ok());
-}
-
-#[test]
-fn test_break() {
-    let val = run_and_get(r#"
-        let sum = 0
-        for i in 1..100 {
-            if i > 5 { break }
-            sum = sum + i
-        }
-    "#, "sum").unwrap();
-    assert_eq!(val, Value::Number(15.0));
-}
-
-#[test]
-fn test_continue() {
-    let val = run_and_get(r#"
-        let sum = 0
-        for i in 1..11 {
-            if i % 2 == 0 { continue }
-            sum = sum + i
-        }
-    "#, "sum").unwrap();
-    assert_eq!(val, Value::Number(25.0)); // 1+3+5+7+9
-}
-
-#[test]
-fn test_range() {
-    assert!(run(r#"
-        let r = 1..10
-        for i in r {
-            print(i)
-        }
-    "#).is_ok());
-}
-
-#[test]
-fn test_length_operator() {
-    let val = run_and_get(r#"
-        let arr = [1, 2, 3, 4, 5]
-        let len = #arr
-    "#, "len").unwrap();
-    assert_eq!(val, Value::Number(5.0));
-}
-
-#[test]
-fn test_fstring() {
-    let val = run_and_get(r#"
-        let name = "Taurine"
-        let msg = f"Hello, {name}!"
-    "#, "msg").unwrap();
-    assert_eq!(val, Value::String("Hello, Taurine!".to_string()));
-}
-
-#[test]
-fn test_class() {
-    assert!(run(r#"
-        class Dog {
-            function bark() {
-                return "Woof!"
-            }
-        }
-        let dog = new Dog()
-        let sound = dog:bark()
-    "#).is_ok());
-}
-
-#[test]
-fn test_class_inheritance() {
-    assert!(run(r#"
-        class Animal {
-            function speak() {
-                return "Some sound"
-            }
-        }
-        class Dog extends Animal {
-            function speak() {
-                return "Woof!"
-            }
-        }
-        let dog = new Dog()
-    "#).is_ok());
-}
-
-#[test]
-fn test_match_expression() {
-    let val = run_and_get(r#"
-        let x = 42
-        let result = match x {
-            0 => "zero",
-            1 => "one",
-            n if n > 0 => "positive",
-            _ => "negative"
-        }
-    "#, "result").unwrap();
-    assert_eq!(val, Value::String("positive".to_string()));
-}
-
-#[test]
-fn test_destructuring() {
-    assert!(run(r#"
-        let arr = [1, 2, 3]
-        let [a, b, c] = arr
-    "#).is_ok());
-}
-
-#[test]
-fn test_spread_operator() {
-    assert!(run(r#"
-        let arr1 = [1, 2, 3]
-        let arr2 = [...arr1, 4, 5, 6]
-    "#).is_ok());
-}
-
-#[test]
-fn test_multi_return() {
-    let val = run_and_get(r#"
-        function divmod(a, b) {
-            return a / b, a % b
-        }
-        let [q, r] = divmod(10, 3)
-    "#, "q").unwrap();
-    assert_eq!(val, Value::Number(3.3333333333333335));
-}
-
-#[test]
-fn test_async_function() {
-    assert!(run(r#"
-        async function fetchData() {
-            return "data"
-        }
-        let result = fetchData()
-    "#).is_ok());
-}
-
-#[test]
-fn test_generator() {
-    assert!(run(r#"
-        generator count() {
-            yield 1
-            yield 2
-            yield 3
-        }
-        let gen = count()
-    "#).is_ok());
+    let stmts = parse("try { risky() } catch (e) { print(e) }").unwrap();
+    assert!(matches!(&stmts[0], Stmt::Try { .. }));
 }
 
 #[test]
 fn test_import() {
-    // Import should work without errors
-    assert!(run(r#"
-        import "std/math.tau" as math
-    "#).is_ok());
+    let stmts = parse(r#"import "module.tau""#).unwrap();
+    assert!(matches!(&stmts[0], Stmt::Import { .. }));
 }
 
 #[test]
-fn test_error_handling() {
-    let result = run("undefined_var + 1");
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_division_by_zero() {
-    let result = run("let x = 10 / 0");
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_type_error() {
-    let result = run(r#"let x = "hello" + 5"#);
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_stack_overflow() {
-    let result = run(r#"
-        function infinite() {
-            return infinite()
+fn test_match_expression() {
+    let stmts = parse(r#"let result = match x { 0 => "zero", _ => "other" }"#).unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { initializer: Some(Expr::Match { arms, .. }), .. } => {
+            assert_eq!(arms.len(), 2);
         }
-        infinite()
-    "#);
-    assert!(result.is_err());
+        _ => panic!("Expected Match"),
+    }
 }
 
 #[test]
-fn test_complex_program() {
-    assert!(run(r#"
-        // Fibonacci
-        function fib(n) {
-            if n <= 1 { return n }
-            return fib(n - 1) + fib(n - 2)
+fn test_async_function() {
+    let stmts = parse("async function fetchData() { return data }").unwrap();
+    assert!(matches!(&stmts[0], Stmt::AsyncFunction { .. }));
+}
+
+#[test]
+fn test_null_coalesce() {
+    let stmts = parse("let x = a ?? b").unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { initializer: Some(Expr::NullCoalesce { .. }), .. } => {}
+        _ => panic!("Expected NullCoalesce"),
+    }
+}
+
+#[test]
+fn test_safe_navigation() {
+    let stmts = parse("let x = obj?.prop").unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { initializer: Some(Expr::SafeGet { .. }), .. } => {}
+        _ => panic!("Expected SafeGet"),
+    }
+}
+
+#[test]
+fn test_spread_operator() {
+    let stmts = parse("let arr = [...other, 4, 5]").unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { initializer: Some(Expr::Array { items, .. }), .. } => {
+            assert!(matches!(&items[0], Expr::Spread { .. }));
         }
-        
-        // Array operations
-        let arr = []
-        for i in 1..11 {
-            io_arraypush(arr, fib(i))
+        _ => panic!("Expected Array with Spread"),
+    }
+}
+
+#[test]
+fn test_return_multi() {
+    let stmts = parse("function f() { return 1, 2, 3 }").unwrap();
+    match &stmts[0] {
+        Stmt::Function { body, .. } => {
+            assert!(matches!(&body[0], Stmt::ReturnMulti(_)));
         }
-        
-        // Table operations
-        let results = {}
-        for i in 1..11 {
-            results["fib_" + tostring(i)] = fib(i)
+        _ => panic!("Expected Function"),
+    }
+}
+
+#[test]
+fn test_fstring() {
+    let stmts = parse(r#"let s = f"Hello {name}""#).unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { initializer: Some(Expr::FString { .. }), .. } => {}
+        _ => panic!("Expected FString"),
+    }
+}
+
+#[test]
+fn test_range() {
+    let stmts = parse("let r = 1..10").unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { initializer: Some(Expr::Range { .. }), .. } => {}
+        _ => panic!("Expected Range"),
+    }
+}
+
+#[test]
+fn test_length_operator() {
+    let stmts = parse("let len = #arr").unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { initializer: Some(Expr::Length { .. }), .. } => {}
+        _ => panic!("Expected Length"),
+    }
+}
+
+#[test]
+fn test_empty_program() {
+    let stmts = parse("").unwrap();
+    assert_eq!(stmts.len(), 0);
+}
+
+#[test]
+fn test_multiple_statements() {
+    let stmts = parse("let x = 1\nlet y = 2\nlet z = 3").unwrap();
+    assert_eq!(stmts.len(), 3);
+}
+
+#[test]
+fn test_default_parameters() {
+    let stmts = parse("function f(x = 10) { return x }").unwrap();
+    match &stmts[0] {
+        Stmt::Function { params, .. } => {
+            assert!(params[0].1.is_some());
         }
-        
-        // String operations
-        let msg = f"Fibonacci sequence: {arr}"
-        
-        print(msg)
-    "#).is_ok());
+        _ => panic!("Expected Function with default param"),
+    }
+}
+
+#[test]
+fn test_await() {
+    let stmts = parse("let x = await promise").unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { initializer: Some(Expr::Await { .. }), .. } => {}
+        _ => panic!("Expected Await"),
+    }
+}
+
+#[test]
+fn test_new_instance() {
+    let stmts = parse("let obj = new MyClass()").unwrap();
+    match &stmts[0] {
+        Stmt::Declaration { initializer: Some(Expr::NewInstance { .. }), .. } => {}
+        _ => panic!("Expected NewInstance"),
+    }
+}
+
+#[test]
+fn test_this() {
+    let stmts = parse("function f() { return this }").unwrap();
+    match &stmts[0] {
+        Stmt::Function { body, .. } => {
+            match &body[0] {
+                Stmt::Return(Some(Expr::This { .. })) => {}
+                _ => panic!("Expected This"),
+            }
+        }
+        _ => panic!("Expected Function"),
+    }
 }

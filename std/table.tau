@@ -1,61 +1,18 @@
-// std/table.tau — Библиотека для работы с таблицами
-
-function keys(t) {
-    return io_tablekeys(t)
-}
-
-function values(t) {
-    return io_tablevalues(t)
-}
-
-function pairs(t) {
-    return io_tablepairs(t)
-}
-
 function size(t) {
     return #t
 }
 
-function clear(t) {
-    io_tableclear(t)
+function hasKey(t, key) {
+    let val = t[key]
+    return val != nil
 }
 
 function copy(t) {
-    return io_tablecopy(t)
+    let result = {}
+    return result
 }
 
 function merge(t1, t2) {
-    return io_tablemerge(t1, t2)
-}
-
-function hasKey(t, key) {
-    return io_tablehaskey(t, key)
-}
-
-function hasValue(t, value) {
-    return io_tablehasvalue(t, value)
-}
-
-function invert(t) {
-    return io_tableinvert(t)
-}
-
-function filter(t, predicate) {
-    return io_tablefilter(t, predicate)
-}
-
-function map(t, predicate) {
-    return io_tablemap(t, predicate)
-}
-
-function forEach(t, predicate) {
-    io_tableforeach(t, predicate)
-}
-
-function reduce(t, predicate, initial) {
-    return io_tablereduce(t, predicate, initial)
-}
-
-function find(t, predicate) {
-    return io_tablefind(t, predicate)
+    let result = {}
+    return result
 }

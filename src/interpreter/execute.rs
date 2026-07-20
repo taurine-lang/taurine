@@ -13,6 +13,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use smallvec::SmallVec;
+use crate::value::GeneratorExecutionState;
 
 fn get_global_packages_dir() -> PathBuf {
     let mut path = dirs::home_dir()
@@ -100,26 +101,85 @@ pub struct Interpreter {
     this_stack: Vec<Value>, 
 }
 
+fn create_default_interner() -> crate::string_intern::StringInterner {
+    let mut interner = crate::string_intern::StringInterner::new();
+    interner.intern_with_id("print", 1);
+    interner.intern_with_id("assert", 2);
+    interner.intern_with_id("assert_eq", 3);
+    interner.intern_with_id("type", 4);
+    interner.intern_with_id("tonumber", 5);
+    interner.intern_with_id("tostring", 6);
+    interner.intern_with_id("io_read", 10);
+    interner.intern_with_id("io_write", 11);
+    interner.intern_with_id("io_append", 12);
+    interner.intern_with_id("io_exists", 13);
+    interner.intern_with_id("io_remove", 14);
+    interner.intern_with_id("io_mkdir", 15);
+    interner.intern_with_id("io_platform", 16);
+    interner.intern_with_id("io_arch", 17);
+    interner.intern_with_id("io_cwd", 18);
+    interner.intern_with_id("io_exit", 19);
+    interner.intern_with_id("io_sleep", 20);
+    interner.intern_with_id("io_time", 21);
+    interner.intern_with_id("io_strupper", 30);
+    interner.intern_with_id("io_strlower", 31);
+    interner.intern_with_id("io_strtrim", 32);
+    interner.intern_with_id("io_strsubstr", 33);
+    interner.intern_with_id("io_strfind", 34);
+    interner.intern_with_id("io_strreplace", 35);
+    interner.intern_with_id("io_strreplaceall", 36);
+    interner.intern_with_id("io_strsplit", 37);
+    interner.intern_with_id("io_char", 38);
+    interner.intern_with_id("io_byte", 39);
+    interner.intern_with_id("io_arraypush", 40);
+    interner.intern_with_id("io_arraypop", 41);
+    interner.intern_with_id("io_arraylen", 42);
+    interner.intern_with_id("io_arrayget", 43);
+    interner.intern_with_id("io_arrayset", 44);
+    interner.intern_with_id("io_arrayconcat", 45);
+    interner.intern_with_id("io_arrayreverse", 46);
+    interner.intern_with_id("io_arrayclear", 47);
+    interner.intern_with_id("json_parse", 50);
+    interner.intern_with_id("json_stringify", 51);
+    interner.intern_with_id("http_get", 60);
+    interner.intern_with_id("http_post", 61);
+    interner.intern_with_id("http_put", 62);
+    interner.intern_with_id("http_delete", 63);
+    interner.intern_with_id("crypto_md5", 70);
+    interner.intern_with_id("crypto_sha256", 71);
+    interner.intern_with_id("crypto_base64_encode", 72);
+    interner.intern_with_id("crypto_base64_decode", 73);
+    interner.intern_with_id("crypto_uuid", 74);
+    interner.intern_with_id("crypto_random_bytes", 75);
+    interner.intern_with_id("date_now", 80);
+    interner.intern_with_id("date_format", 81);
+    interner.intern_with_id("regex_match", 90);
+    interner.intern_with_id("regex_find", 91);
+    interner.intern_with_id("regex_replace", 92);
+    interner.intern_with_id("regex_find_all", 93);
+    interner.intern_with_id("async_sleep", 100);
+    interner.intern_with_id("async_spawn", 101);
+    interner
+}
+
 impl Interpreter {
     pub fn new(base_path: PathBuf) -> Self {
-        Self::with_interner(base_path, crate::string_intern::StringInterner::new())
+        Self::with_interner(base_path, create_default_interner())
     }
-
     pub fn with_interner(base_path: PathBuf, interner: crate::string_intern::StringInterner) -> Self {
         Self::with_limits_and_interner(base_path, SafetyLimits::default(), interner)
     }
 
     pub fn with_limits(base_path: PathBuf, limits: SafetyLimits) -> Self {
-        Self::with_limits_and_interner(base_path, limits, crate::string_intern::StringInterner::new())
+        Self::with_limits_and_interner(base_path, limits, create_default_interner())
     }
 
     pub fn with_limits_and_interner(base_path: PathBuf, limits: SafetyLimits, interner: crate::string_intern::StringInterner) -> Self {
         Self::with_gc_and_interner(base_path, limits, None, interner)
     }
 
-        /// Create interpreter with garbage collector
     pub fn with_gc(base_path: PathBuf, limits: SafetyLimits, gc_config: Option<GcConfig>) -> Self {
-        Self::with_gc_and_interner(base_path, limits, gc_config, crate::string_intern::StringInterner::new())
+        Self::with_gc_and_interner(base_path, limits, gc_config, create_default_interner())
     }
 
     pub fn with_gc_and_interner(base_path: PathBuf, limits: SafetyLimits, gc_config: Option<GcConfig>, interner: crate::string_intern::StringInterner) -> Self {
@@ -144,6 +204,108 @@ impl Interpreter {
         interp.load_stdlib(); 
         
         interp
+    }
+
+    /// Get next value from a generator (lazy evaluation)
+    pub fn generator_next(&mut self, generator: &Value) -> Result<Value, String> {
+        match generator {
+            Value::Generator { body, closure, state, .. } => {
+                // 1. Check if there are already yielded values to consume
+                {
+                    let mut gen_state = state.borrow_mut();
+                    if gen_state.consumed_index < gen_state.yielded_values.len() {
+                        let value = gen_state.yielded_values[gen_state.consumed_index].clone();
+                        gen_state.consumed_index += 1;
+                        return Ok(value);
+                    }
+                    if gen_state.is_done {
+                        return Ok(Value::Nil);
+                    }
+                } // gen_state dropped here to release borrow
+
+                // 2. Clone execution state and body to avoid borrowing issues during execution
+                let exec_state = state.borrow().execution_state.clone();
+                let parent_env = closure.clone();
+                
+                let body_to_run = match &exec_state {
+                    GeneratorExecutionState::NotStarted => body.clone(),
+                    GeneratorExecutionState::Suspended { remaining_body, .. } => remaining_body.clone(),
+                    GeneratorExecutionState::Finished => return Ok(Value::Nil),
+                };
+
+                // 3. Setup environment and execute
+                let new_env = std::rc::Rc::new(std::cell::RefCell::new(
+                    crate::environment::Environment::with_parent(parent_env)
+                ));
+
+                let old_global = std::mem::replace(&mut self.global, new_env.clone());
+                let old_return = self.return_value.take();
+
+                let mut found_yield = false;
+                let mut yielded_val = Value::Nil;
+                let mut suspend_index = 0;
+
+                for (i, stmt) in body_to_run.iter().enumerate() {
+                    match self.execute_stmt(stmt.clone()) {
+                        Ok(_) => {
+                            if let Some(val) = self.return_value.take() {
+                                found_yield = true;
+                                yielded_val = val;
+                                suspend_index = i;
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            self.global = old_global;
+                            self.return_value = old_return;
+                            return Err(e);
+                        }
+                    }
+                }
+
+                // 4. Restore environment
+                self.global = old_global;
+                self.return_value = old_return;
+
+                // 5. Update generator state (now we can mutably borrow it safely)
+                let mut gen_state = state.borrow_mut();
+                if found_yield {
+                    gen_state.yielded_values.push(yielded_val);
+                    
+                    let original_len = match &exec_state {
+                        GeneratorExecutionState::NotStarted => body.len(),
+                        GeneratorExecutionState::Suspended { remaining_body, .. } => remaining_body.len(),
+                        _ => 0,
+                    };
+
+                    if suspend_index + 1 < original_len {
+                        let full_body = match &exec_state {
+                            GeneratorExecutionState::NotStarted => body.clone(),
+                            GeneratorExecutionState::Suspended { remaining_body, .. } => remaining_body.clone(),
+                            _ => vec![],
+                        };
+                        
+                        gen_state.execution_state = GeneratorExecutionState::Suspended {
+                            remaining_body: full_body[suspend_index + 1..].to_vec(),
+                            closure: new_env.clone(),
+                        };
+                    } else {
+                        gen_state.execution_state = GeneratorExecutionState::Finished;
+                        gen_state.is_done = true;
+                    }
+                } else {
+                    gen_state.is_done = true;
+                    gen_state.execution_state = GeneratorExecutionState::Finished;
+                    return Ok(Value::Nil);
+                }
+
+                // 6. Return the newly yielded value
+                let value = gen_state.yielded_values[gen_state.consumed_index].clone();
+                gen_state.consumed_index += 1;
+                Ok(value)
+            }
+            _ => Err("Not a generator".to_string()),
+        }
     }
 
     pub fn clear_module_cache(&self) {
@@ -179,6 +341,39 @@ impl Interpreter {
         if let Some(ref mut gc) = self.gc {
             gc.collect_full();
         }
+    }
+
+    /// Register a table/array value with the GC for cycle tracking
+    pub fn gc_track_value(&mut self, id: usize, size: usize) -> usize {
+        if let Some(ref mut gc) = self.gc {
+            gc.allocate(size)
+        } else {
+            id
+        }
+    }
+
+    /// Register a parent-child relationship for cycle detection
+    pub fn gc_add_child(&mut self, parent_id: usize, child_id: usize) {
+        if let Some(ref mut gc) = self.gc {
+            gc.add_child(parent_id, child_id);
+        }
+    }
+
+    /// Collect cycles: detect and break circular references
+    pub fn gc_collect_cycles(&mut self) -> usize {
+        if let Some(ref mut gc) = self.gc {
+            let before = gc.stats().cycles_found;
+            gc.collect_full();
+            let after = gc.stats().cycles_found;
+            (after - before) as usize
+        } else {
+            0
+        }
+    }
+
+    /// Get the number of cycles found
+    pub fn gc_cycles_found(&self) -> usize {
+        self.gc.as_ref().map_or(0, |gc| gc.stats().cycles_found)
     }
 
     /// Get GC enabled status
@@ -316,30 +511,7 @@ impl Interpreter {
     }
 
     fn load_stdlib(&mut self) {
-        if let Some(dir) = self.find_std_dir() {
-            let core_files = [
-                "array.tau", "json.tau", "crypto.tau", 
-                "date.tau", "http.tau", "regex.tau"
-            ];
-            
-            for file in core_files {
-                let path = dir.join(file);
-                if path.exists() {
-                    if let Ok(source) = std::fs::read_to_string(&path) {
-                        let tokens = crate::lexer::tokenize_with_interner(&source, &mut self.interner);
-                        let mut parser = crate::parser::Parser::with_interner(tokens, self.interner.clone());
-                        
-                        if let Ok(program) = parser.parse() {
-                            if let Some(updated_interner) = parser.take_interner() {
-                                self.interner = updated_interner;
-                            }
-                            let _ = self.interpret(program);
-                            self.return_value = None;
-                        }
-                    }
-                }
-            }
-        }
+       
     }
 
 
@@ -554,18 +726,20 @@ impl Interpreter {
                             }
                         }
                     }
-                    Value::Generator { state, .. } => {
-                        // Iterate over generator yielded values
+                    Value::Generator { .. } => {
+                        // Lazy iteration over generator
                         loop {
-                            let state_ref = state.borrow();
-                            if state_ref.is_done || state_ref.consumed_index >= state_ref.yielded_values.len() {
-                                drop(state_ref);
-                                break;
-                            }
-                            let item = state_ref.yielded_values[state_ref.consumed_index].clone();
-                            drop(state_ref);
-
+                            self.safety.safety_check()?;
+                            
+                            // Get next value from generator
+                            let item = match self.generator_next(&iter_value) {
+                                Ok(Value::Nil) => break, // Generator exhausted
+                                Ok(val) => val,
+                                Err(e) => return Err(e),
+                            };
+                            
                             self.global.borrow_mut().define(variable, item);
+                            
                             for stmt in &body {
                                 match self.execute_stmt(stmt.clone()) {
                                     Ok(_) => {}
@@ -744,14 +918,27 @@ impl Interpreter {
                 let val = self.execute_expr(*expr)?;
                 self.evaluate_unary(val, op)
             }
-            Expr::Call { callee, arguments , line } => {
-            self.current_line = line;
-            
+            Expr::Call { callee, arguments, line } => {
+                self.current_line = line;
+
+                if let Expr::Identifier(name) = &*callee {
+                    if name.id() == 50 && arguments.len() == 1 {
+                        let arg = self.execute_expr(arguments[0].clone())?;
+                        if let Value::String(s) = arg {
+                            return self.json_parse(&s);
+                        }
+                    }
+                    if name.id() == 51 && arguments.len() == 1 {
+                        let arg = self.execute_expr(arguments[0].clone())?;
+                        let json = self.json_stringify(&arg)?;
+                        return Ok(Value::String(json));
+                    }
+                }
+
             if let Expr::Get { object, name, .. } = &*callee {
                 let obj_val = self.execute_expr(*object.clone())?;
                 if let Value::Table(ref t) = obj_val {
                     if let Some(method) = t.borrow().get(&name.id()).cloned() {
-                        // КЛОНИРУЕМ obj_val, чтобы не конфликтовать с borrow
                         self.this_stack.push(obj_val.clone());
                         let args_res: Result<Vec<Value>, String> = arguments.into_iter().map(|a| self.execute_expr(a)).collect();
                         let result = self.call_function(method, args_res?);
@@ -761,13 +948,12 @@ impl Interpreter {
                 }
             }
 
-            // Перехват безопасного вызова (obj?.method())
             if let Expr::SafeGet { object, name, .. } = &*callee {
                 let obj_val = self.execute_expr(*object.clone())?;
                 if obj_val == Value::Nil { return Ok(Value::Nil); }
                 if let Value::Table(ref t) = obj_val {
                     if let Some(method) = t.borrow().get(&name.id()).cloned() {
-                        // КЛОНИРУЕМ obj_val
+
                         self.this_stack.push(obj_val.clone());
                         let args_res: Result<Vec<Value>, String> = arguments.into_iter().map(|a| self.execute_expr(a)).collect();
                         let result = self.call_function(method, args_res?);
@@ -902,23 +1088,15 @@ impl Interpreter {
             Expr::Await { future, line } => {
                 self.current_line = line;
                 let future_val = self.execute_expr(*future)?;
-                // Await on a Future value - block until ready
                 match &future_val {
                     Value::Future(state) => {
-                        let state_ref = state.borrow_mut();
+                        let state_ref = state.borrow();
                         match &*state_ref {
                             crate::value::FutureState::Ready(v) => Ok(v.clone()),
-                            crate::value::FutureState::Pending => {
-                                // For now, treat pending as ready with nil
-                                // In a real async runtime, we would yield here
-                                Ok(Value::Nil)
-                            }
+                            crate::value::FutureState::Pending => Ok(Value::Nil),
                         }
                     }
-                    _ => {
-                        // If not a Future, just return the value directly
-                        Ok(future_val)
-                    }
+                    _ => Ok(future_val),
                 }
             }
             Expr::Yield { value, line } => {
@@ -927,8 +1105,8 @@ impl Interpreter {
                     Some(v) => self.execute_expr(*v)?,
                     None => Value::Nil,
                 };
-                // Store yielded value in generator state
-                // This will be consumed by the generator's next() method
+                // Store yield value in return_value for generator_next to pick up
+                self.return_value = Some(yield_val.clone());
                 Ok(yield_val)
             }
             Expr::Spread { expr, line } => {
@@ -1201,7 +1379,6 @@ impl Interpreter {
                     function: format!("async function {name}"),
                     line: self.current_line,
                 });
-                let future_state = Rc::new(RefCell::new(crate::value::FutureState::Pending));
                 let old_global = std::mem::replace(&mut self.global, new_env.clone());
                 let exec_result = (|| -> Result<Value, String> {
                     for stmt in &body {
@@ -1213,10 +1390,7 @@ impl Interpreter {
                 self.global = old_global;
                 self.call_stack.pop();
                 match exec_result {
-                    Ok(v) => {
-                        *future_state.borrow_mut() = crate::value::FutureState::Ready(v.clone());
-                        Ok(Value::Future(future_state))
-                    }
+                    Ok(v) => Ok(v),
                     Err(e) => Err(e),
                 }
             }
@@ -1683,6 +1857,53 @@ mod tests {
         assert!(interp.run(r#"
             function double(n) { return n * 2 }
             let result = double(5)
+        "#).is_ok());
+    }
+    #[test]
+    fn test_interpreter_async_function() {
+        let mut interp = create_interp();
+        assert!(interp.run(r#"
+            async function fetchData(url) {
+                return "Data from " + url
+            }
+            let result = fetchData("https://example.com")
+        "#).is_ok());
+    }
+
+    #[test]
+    fn test_interpreter_await() {
+        let mut interp = create_interp();
+        assert!(interp.run(r#"
+            async function getNumber() {
+                return 42
+            }
+            let result = await getNumber()
+        "#).is_ok());
+    }
+
+    #[test]
+    fn test_interpreter_async_with_params() {
+        let mut interp = create_interp();
+        assert!(interp.run(r#"
+            async function add(a, b) {
+                return a + b
+            }
+            let sum = await add(10, 20)
+        "#).is_ok());
+    }
+
+    #[test]
+    fn test_interpreter_nested_async() {
+        let mut interp = create_interp();
+        assert!(interp.run(r#"
+            async function inner(x) {
+                return x * 10
+            }
+            async function outer(x) {
+                let r = await inner(x)
+                return r + 1
+            }
+            let result = await outer(3)
         "#).is_ok());
     }
 }

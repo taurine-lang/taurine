@@ -69,14 +69,16 @@ fn create_interner_with_builtins() -> StringInterner {
     interner.intern_with_id("regex_find", 91);
     interner.intern_with_id("regex_replace", 92);
     interner.intern_with_id("regex_find_all", 93);
+    interner.intern_with_id("async_sleep", 100);
+    interner.intern_with_id("async_spawn", 101);
     
     interner
 }
 
 #[derive(Parser, Debug)]
 #[command(name = "taurine")]
-#[command(about = "Taurine Programming Language v2.13.0", long_about = None)]
-#[command(version = "2.13.0")]
+#[command(about = "Taurine Programming Language v2.14.0", long_about = None)]
+#[command(version = "2.14.0")]
 struct Args {
     file: Option<String>,
     #[arg(short, long, default_value_t = false)]
@@ -133,10 +135,9 @@ fn run_file(args: Args) {
 }
 
 fn run_repl() {
-    println!("Taurine v2.13 REPL");
+    println!("Taurine v2.14 REPL");
     println!("Type 'exit' or 'quit' to exit\n");
 
-    // 1. Инициализируем интернер и интерпретатор ОДИН РАЗ вне цикла
     let mut interner = create_interner_with_builtins();
     let mut interpreter = Interpreter::with_interner(PathBuf::from("."), interner.clone());
     let mut input = String::new();
@@ -165,13 +166,11 @@ fn run_repl() {
             continue;
         }
 
-        // 2. Используем ТОТ ЖЕ интернер, чтобы ID переменных сохранялись между строками
         let tokens = tokenize_with_interner(input_trimmed, &mut interner);
         let mut parser = TaurineParser::with_interner(tokens, interner.clone());
 
         match parser.parse() {
             Ok(program) => {
-                // Забираем обновленный интернер из парсера (на случай, если появились новые строки)
                 if let Some(updated_interner) = parser.take_interner() {
                     interner = updated_interner;
                 }
@@ -186,7 +185,7 @@ fn run_repl() {
 }
 
 fn run_demo() {
-    println!("Taurine v2.13.0\n");
+    println!("Taurine v2.14.0\n");
     println!("Usage:");
     println!("  taurine <file.tau>     Run a script");
     println!("  taurine --repl         Start REPL");
@@ -231,7 +230,6 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
             std::process::exit(1);
         }
     };
-    // Get the updated interner from parser
     let parse_time = parse_start.elapsed();
     if debug {
         println!("AST (before optimization):\n{program:#?}\n");
@@ -274,7 +272,6 @@ fn run_source(source: &str, filename: &str, base_path: PathBuf, debug: bool, opt
             }
         }
         Err(e) => {
-            // КРАСИВЫЙ ВЫВОД ОШИБКИ С ЦВЕТАМИ
             eprintln!("error: {}", e.message());
             if e.line() > 0 {
                 eprintln!("line {}", e.line());

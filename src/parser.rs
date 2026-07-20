@@ -641,6 +641,27 @@ impl Parser {
             self.consume(&TokenKind::RParen, "Expected ')' after expression")?;
             return Ok(expr);
         }
+        if self.match_token(&TokenKind::New) {
+            let class_name = self.consume_identifier()?;
+            self.consume(&TokenKind::LParen, "Expected '(' after class name in new")?;
+            let arguments = self.arguments()?;
+            return Ok(Expr::NewInstance { class_name, arguments, line });
+        }
+
+        if self.match_token(&TokenKind::This) {
+            return Ok(Expr::This { line });
+        }
+
+        if self.match_token(&TokenKind::Super) {
+            self.consume(&TokenKind::Dot, "Expected '.' after super")?;
+            let method = self.consume_identifier()?;
+            return Ok(Expr::Super { method, line });
+        }
+
+        if self.match_token(&TokenKind::DotDotDot) {
+            let expr = self.expression()?;
+            return Ok(Expr::Spread { expr: Box::new(expr), line });
+        }
         if self.match_token(&TokenKind::Identifier) {
             let param_lexeme = self.previous().lexeme.clone();
             if self.match_token(&TokenKind::FatArrow) {

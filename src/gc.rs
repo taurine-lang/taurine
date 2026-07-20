@@ -5,7 +5,6 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 // Configuration
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GcStrategy {
     ReferenceCounting,
@@ -108,7 +107,6 @@ impl Default for GcConfigBuilder {
 }
 
 // Statistics
-
 #[derive(Clone, Debug, Default)]
 pub struct GcStats {
     pub allocations: usize,
@@ -148,14 +146,12 @@ impl fmt::Display for GcStats {
 }
 
 // Object Colors
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Color {
     White,
 }
 
 // Heap Object
-
 #[derive(Debug)]
 #[allow(dead_code)]
 struct HeapObject {
@@ -184,7 +180,6 @@ impl HeapObject {
 }
 
 // Arena
-
 struct Arena {
     buffer: Vec<u8>,
     offset: Cell<usize>,
@@ -203,11 +198,11 @@ impl Arena {
     }
 
     fn reset(&self) { self.offset.set(0); }
+
     fn used(&self) -> usize { self.offset.get() }
 }
 
 // Generational Heap
-
 #[allow(dead_code)]
 struct GenHeap {
     young: HashSet<usize>,
@@ -223,7 +218,6 @@ impl GenHeap {
 }
 
 // Garbage Collector
-
 pub struct GarbageCollector {
     config: GcConfig,
     stats: GcStats,
@@ -359,6 +353,7 @@ impl GarbageCollector {
 
     pub fn collect(&mut self) {
         if !self.enabled.get() { return; }
+
         let start = Instant::now();
 
         match self.config.strategy {
@@ -375,8 +370,105 @@ impl GarbageCollector {
     }
 
     pub fn collect_full(&mut self) {
+        if self.config.enable_cycle_detection {
+            let cycles = self.detect_cycles();
+            if !cycles.is_empty() {
+                self.stats.cycle_collections += 1;
+                self.stats.cycles_found += cycles.len();
+
+                if self.config.strategy == GcStrategy::ReferenceCounting {
+                    for cycle in &cycles {
+                        if cycle.len() >= 2 {
+                            let mut removed = false;
+                            for i in 0..cycle.len() {
+                                let from = cycle[i];
+                                let to = cycle[(i + 1) % cycle.len()];
+                                if !self.roots.contains(&from) {
+                                    self.remove_child(from, to);
+                                    removed = true;
+                                    break;
+                                }
+                            }
+                            if !removed {
+                                let last = cycle[cycle.len() - 1];
+                                let first = cycle[0];
+                                self.remove_child(last, first);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         self.collect();
-        // Cycle detection simplified
+    }
+
+    /// Detect cycles in the object graph using iterative DFS with coloring
+    fn detect_cycles(&self) -> Vec<Vec<usize>> {
+        // 0 = White (unvisited), 1 = Gray (in progress), 2 = Black (done)
+        let mut colors: HashMap<usize, u8> = HashMap::new();
+        let mut cycles: Vec<Vec<usize>> = Vec::new();
+
+        for &id in self.objects.keys() {
+            colors.insert(id, 0);
+        }
+
+        let all_ids: Vec<usize> = self.objects.keys().copied().collect();
+        for start_id in all_ids {
+            if colors.get(&start_id) == Some(&0) {
+                self.dfs_find_cycles(start_id, &mut colors, &mut cycles);
+            }
+        }
+
+        cycles
+    }
+
+    /// Iterative DFS for cycle detection (avoids stack overflow on deep graphs)
+    fn dfs_find_cycles(
+        &self,
+        start: usize,
+        colors: &mut HashMap<usize, u8>,
+        cycles: &mut Vec<Vec<usize>>,
+    ) {
+        // Stack of (node, child_index)
+        let mut stack: Vec<(usize, usize)> = vec![(start, 0)];
+        let mut path: Vec<usize> = vec![start];
+        colors.insert(start, 1); // Gray
+
+        while let Some((node, child_idx)) = stack.last_mut() {
+            let children = self.children.get(node);
+            let child_count = children.map_or(0, |c| c.len());
+
+            if *child_idx >= child_count {
+                // All children processed
+                colors.insert(*node, 2); // Black
+                path.pop();
+                stack.pop();
+                continue;
+            }
+
+            let child = children.unwrap()[*child_idx];
+            *child_idx += 1;
+
+            match colors.get(&child) {
+                Some(&0) => {
+                    // White: visit
+                    colors.insert(child, 1);
+                    path.push(child);
+                    stack.push((child, 0));
+                }
+                Some(&1) => {
+                    // Gray: found a cycle!
+                    if let Some(cycle_start) = path.iter().position(|&x| x == child) {
+                        let cycle: Vec<usize> = path[cycle_start..].to_vec();
+                        cycles.push(cycle);
+                    }
+                }
+                _ => {
+                    // Black or unknown: skip
+                }
+            }
+        }
     }
 
     fn maybe_collect(&mut self) {
@@ -391,6 +483,7 @@ impl GarbageCollector {
             .filter(|(_, o)| o.ref_count.get() == 0 && !o.is_root.get())
             .map(|(&id, _)| id)
             .collect();
+
         for id in zero_ref { self.deallocate(id); }
     }
 
@@ -399,6 +492,7 @@ impl GarbageCollector {
         for obj in self.objects.values_mut() {
             obj.marked.set(false);
         }
+
         let roots: Vec<usize> = self.roots.iter().copied().collect();
         for id in roots { self.mark(id); }
 
@@ -407,6 +501,7 @@ impl GarbageCollector {
             .filter(|(_, o)| !o.marked.get() && !o.is_root.get())
             .map(|(&id, _)| id)
             .collect();
+
         for id in unmarked { self.deallocate(id); }
     }
 
@@ -433,11 +528,13 @@ impl GarbageCollector {
                     }
                 }
             }
+
             // Deallocate after iteration to avoid borrow issues
             let to_remove: Vec<usize> = self.objects.iter()
                 .filter(|(_, o)| o.ref_count.get() == 0)
                 .map(|(&id, _)| id)
                 .collect();
+
             for id in to_remove {
                 self.deallocate(id);
             }
@@ -466,7 +563,6 @@ impl Default for GarbageCollector {
 }
 
 // GcPtr - GC managed pointer
-
 pub struct GcPtr<T> {
     inner: std::rc::Rc<T>,
 }
@@ -494,7 +590,6 @@ impl<T> std::ops::Deref for GcPtr<T> {
 }
 
 // Tests
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,12 +640,16 @@ mod tests {
             strategy: GcStrategy::MarkAndSweep,
             ..Default::default()
         });
+
         let root = gc.allocate(100);
         let child = gc.allocate(50);
         let unreachable = gc.allocate(75);
+
         gc.add_root(root);
         gc.add_child(root, child);
+
         gc.collect();
+
         assert!(gc.objects.contains_key(&root));
         assert!(gc.objects.contains_key(&child));
         assert!(!gc.objects.contains_key(&unreachable));
@@ -570,7 +669,6 @@ mod tests {
         let id1 = gc.allocate(100);
         let id2 = gc.allocate(200);
         assert!(gc.arena.is_some());
-        // Arena IDs start at 0
         assert!(id1 >= 0);
         assert!(id2 >= 0);
         gc.reset_arena();
@@ -613,8 +711,10 @@ mod tests {
     fn test_gc_preconfigured() {
         let server = GarbageCollector::for_server();
         assert_eq!(server.config.strategy, GcStrategy::Generational);
+
         let cli = GarbageCollector::for_cli();
         assert_eq!(cli.config.strategy, GcStrategy::Arena);
+
         let embedded = GarbageCollector::for_embedded();
         assert_eq!(embedded.config.strategy, GcStrategy::ReferenceCounting);
     }
@@ -625,9 +725,12 @@ mod tests {
         let parent = gc.allocate(100);
         let child1 = gc.allocate(50);
         let child2 = gc.allocate(50);
+
         gc.add_child(parent, child1);
         gc.add_child(parent, child2);
+
         assert_eq!(gc.objects.get(&child1).unwrap().ref_count.get(), 2);
+
         gc.remove_child(parent, child1);
         assert_eq!(gc.objects.get(&child1).unwrap().ref_count.get(), 1);
     }
@@ -640,6 +743,7 @@ mod tests {
             strategy: GcStrategy::MarkAndSweep,
             ..Default::default()
         });
+
         for _ in 0..10 { gc.allocate(100); }
         assert!(gc.stats.collections > 0);
     }
@@ -660,5 +764,97 @@ mod tests {
         assert_eq!(ptr.strong_count(), 1);
         let _ptr2 = ptr.clone();
         assert_eq!(ptr.strong_count(), 2);
+    }
+
+    #[test]
+    fn test_gc_cycle_detection_simple() {
+        let config = GcConfig::builder()
+            .strategy(GcStrategy::ReferenceCounting)
+            .enable_cycle_detection(true)
+            .build();
+        let mut gc = GarbageCollector::new(config);
+
+        // Create cycle: A -> B -> A
+        let a = gc.allocate(100);
+        let b = gc.allocate(100);
+        gc.add_child(a, b);
+        gc.add_child(b, a);
+
+        assert!(gc.objects.contains_key(&a));
+        assert!(gc.objects.contains_key(&b));
+
+        gc.collect_full();
+
+        assert!(gc.stats().cycles_found > 0);
+    }
+
+    #[test]
+    fn test_gc_cycle_detection_three_nodes() {
+        let config = GcConfig::builder()
+            .strategy(GcStrategy::MarkAndSweep)
+            .enable_cycle_detection(true)
+            .build();
+        let mut gc = GarbageCollector::new(config);
+
+        // Cycle: A -> B -> C -> A
+        let a = gc.allocate(50);
+        let b = gc.allocate(50);
+        let c = gc.allocate(50);
+        gc.add_child(a, b);
+        gc.add_child(b, c);
+        gc.add_child(c, a);
+
+        gc.collect_full();
+
+        assert!(gc.stats().cycles_found > 0);
+    }
+
+    #[test]
+    fn test_gc_no_false_cycles() {
+        let config = GcConfig::builder()
+            .strategy(GcStrategy::ReferenceCounting)
+            .enable_cycle_detection(true)
+            .build();
+        let mut gc = GarbageCollector::new(config);
+
+        // Tree without cycles: A -> B, A -> C, B -> D
+        let a = gc.allocate(100);
+        let b = gc.allocate(50);
+        let c = gc.allocate(50);
+        let d = gc.allocate(25);
+        gc.add_root(a);
+        gc.add_child(a, b);
+        gc.add_child(a, c);
+        gc.add_child(b, d);
+
+        gc.collect_full();
+
+        assert_eq!(gc.stats().cycles_found, 0);
+        assert!(gc.objects.contains_key(&a));
+        assert!(gc.objects.contains_key(&b));
+        assert!(gc.objects.contains_key(&c));
+        assert!(gc.objects.contains_key(&d));
+    }
+
+    #[test]
+    fn test_gc_cycle_with_root() {
+        let config = GcConfig::builder()
+            .strategy(GcStrategy::MarkAndSweep)
+            .enable_cycle_detection(true)
+            .build();
+        let mut gc = GarbageCollector::new(config);
+
+        // Cycle A -> B -> A, but A is a root
+        let a = gc.allocate(100);
+        let b = gc.allocate(100);
+        gc.add_root(a);
+        gc.add_child(a, b);
+        gc.add_child(b, a);
+
+        gc.collect_full();
+
+        // A and B should be alive (A is root, B reachable from A)
+        assert!(gc.objects.contains_key(&a));
+        assert!(gc.objects.contains_key(&b));
     }
 }
