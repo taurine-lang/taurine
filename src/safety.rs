@@ -111,11 +111,13 @@ impl SafetyContext {
     }
 
     pub fn interrupt(&self) {
-        self.interrupted.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.interrupted
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn reset(&self) {
-        self.interrupted.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.interrupted
+            .store(false, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn is_interrupted(&self) -> bool {
@@ -139,22 +141,17 @@ impl SafetyContext {
 // ============================================================================
 
 /// Security level for script execution
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub enum SecurityLevel {
     /// Full access - no restrictions
     Full,
     /// Standard - basic restrictions
+    #[default]
     Standard,
     /// Restricted - limited file/network access
     Restricted,
     /// Sandbox - isolated execution
     Sandbox,
-}
-
-impl Default for SecurityLevel {
-    fn default() -> Self {
-        SecurityLevel::Standard
-    }
 }
 
 // ============================================================================
@@ -211,7 +208,7 @@ impl Permissions {
             allowed_paths: HashSet::new(),
             allowed_hosts: HashSet::new(),
             max_file_size: 10 * 1024 * 1024, // 10 MB
-            max_network_size: 1 * 1024 * 1024, // 1 MB
+            max_network_size: 1024 * 1024,   // 1 MB
         }
     }
 
@@ -238,7 +235,9 @@ impl Permissions {
         if self.allowed_paths.is_empty() {
             return true;
         }
-        self.allowed_paths.iter().any(|allowed| path.starts_with(allowed))
+        self.allowed_paths
+            .iter()
+            .any(|allowed| path.starts_with(allowed))
     }
 
     /// Check if host is allowed
@@ -249,7 +248,9 @@ impl Permissions {
         if self.allowed_hosts.is_empty() {
             return true;
         }
-        self.allowed_hosts.iter().any(|allowed| host.contains(allowed))
+        self.allowed_hosts
+            .iter()
+            .any(|allowed| host.contains(allowed))
     }
 }
 
@@ -337,9 +338,15 @@ impl SecurityContext {
                     "io_read".to_string(),
                     "io_write".to_string(),
                     "io_append".to_string(),
+                    "io_exists".to_string(),
                     "io_remove".to_string(),
+                    "io_mkdir".to_string(),
+                    "io_exit".to_string(),
                     "http_get".to_string(),
                     "http_post".to_string(),
+                    "http_put".to_string(),
+                    "http_delete".to_string(),
+                    "async_spawn".to_string(),
                 ]);
             }
         }
@@ -497,7 +504,12 @@ impl InputValidator {
                 max_length
             )));
         }
-
+        if input.contains('\0') {
+            return Err(SecurityError::SandboxViolation(
+                "Null byte in input".to_string(),
+            ));
+        }
+        let lower = input.to_lowercase();
         // Check for common injection patterns
         let dangerous_patterns = [
             "../",
@@ -511,7 +523,7 @@ impl InputValidator {
         ];
 
         for pattern in dangerous_patterns {
-            if input.to_lowercase().contains(pattern) {
+            if lower.contains(pattern) {
                 return Err(SecurityError::SandboxViolation(format!(
                     "Dangerous pattern detected: {}",
                     pattern
@@ -685,7 +697,7 @@ mod tests {
         let mut ctx = SecurityContext::with_level(SecurityLevel::Sandbox);
         assert_eq!(*ctx.level(), SecurityLevel::Sandbox);
         assert!(!ctx.is_function_allowed("io_read"));
-        
+
         ctx.apply_level(&SecurityLevel::Full);
         assert_eq!(*ctx.level(), SecurityLevel::Full);
         assert!(ctx.is_function_allowed("io_read"));
@@ -696,7 +708,7 @@ mod tests {
         let mut ctx = SecurityContext::new();
         ctx.block_function("custom_function");
         assert!(!ctx.is_function_allowed("custom_function"));
-        
+
         ctx.unblock_function("custom_function");
         assert!(ctx.is_function_allowed("custom_function"));
     }
@@ -706,7 +718,7 @@ mod tests {
         let mut ctx = SecurityContext::new();
         ctx.permissions.allow_fs = true;
         assert!(ctx.validate_path("/safe/path").is_ok());
-        
+
         ctx.permissions.allow_fs = false;
         assert!(ctx.validate_path("/any/path").is_err());
     }
@@ -716,7 +728,7 @@ mod tests {
         let mut ctx = SecurityContext::new();
         ctx.permissions.allow_network = true;
         assert!(ctx.validate_host("example.com").is_ok());
-        
+
         ctx.permissions.allow_network = false;
         assert!(ctx.validate_host("example.com").is_err());
     }
@@ -747,17 +759,17 @@ mod tests {
     #[test]
     fn test_resource_tracker() {
         let mut tracker = ResourceTracker::with_max_operations(100);
-        
+
         for _ in 0..50 {
             assert!(tracker.record_operation().is_ok());
         }
-        
+
         assert_eq!(tracker.operations(), 50);
-        
+
         for _ in 0..50 {
             assert!(tracker.record_operation().is_ok());
         }
-        
+
         // Next should fail
         assert!(tracker.record_operation().is_err());
     }
@@ -766,7 +778,7 @@ mod tests {
     fn test_resource_tracker_timeout() {
         let tracker = ResourceTracker::new();
         assert!(tracker.check_timeout(Duration::from_secs(1)).is_ok());
-        
+
         std::thread::sleep(Duration::from_millis(100));
         assert!(tracker.check_timeout(Duration::from_millis(50)).is_err());
     }
@@ -784,9 +796,9 @@ mod tests {
         let mut tracker = ResourceTracker::new();
         tracker.record_memory(1024);
         tracker.record_operation().unwrap();
-        
+
         tracker.reset();
-        
+
         assert_eq!(tracker.memory_used(), 0);
         assert_eq!(tracker.operations(), 0);
     }
@@ -795,19 +807,24 @@ mod tests {
     fn test_security_error_display() {
         let err = SecurityError::PathNotAllowed("/forbidden".to_string());
         assert!(err.to_string().contains("/forbidden"));
-        
-        let err = SecurityError::FileSizeExceeded { size: 1000, max: 500 };
+
+        let err = SecurityError::FileSizeExceeded {
+            size: 1000,
+            max: 500,
+        };
         assert!(err.to_string().contains("1000"));
         assert!(err.to_string().contains("500"));
     }
 
     #[test]
     fn test_permissions_allowed_paths() {
-        let mut perms = Permissions::default();
-        perms.allow_fs = true;
+        let mut perms = Permissions {
+            allow_fs: true,
+            ..Default::default()
+        };
         perms.allowed_paths.insert("/safe".to_string());
         perms.allowed_paths.insert("/tmp".to_string());
-        
+
         assert!(perms.is_path_allowed("/safe/file.txt"));
         assert!(perms.is_path_allowed("/tmp/file.txt"));
         assert!(!perms.is_path_allowed("/etc/passwd"));
@@ -815,11 +832,13 @@ mod tests {
 
     #[test]
     fn test_permissions_allowed_hosts() {
-        let mut perms = Permissions::default();
-        perms.allow_network = true;
+        let mut perms = Permissions {
+            allow_network: true,
+            ..Default::default()
+        };
         perms.allowed_hosts.insert("api.".to_string());
         perms.allowed_hosts.insert("trusted.com".to_string());
-        
+
         assert!(perms.is_host_allowed("api.example.com"));
         assert!(perms.is_host_allowed("trusted.com"));
         assert!(!perms.is_host_allowed("malicious.com"));
@@ -831,7 +850,7 @@ mod tests {
         ctx.set_timeout(Duration::from_secs(60));
         ctx.set_max_memory(512 * 1024 * 1024);
         ctx.set_max_recursion(2000);
-        
+
         assert_eq!(ctx.timeout(), Some(Duration::from_secs(60)));
         assert_eq!(ctx.max_memory(), 512 * 1024 * 1024);
         assert_eq!(ctx.max_recursion(), 2000);

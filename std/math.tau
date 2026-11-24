@@ -1,7 +1,7 @@
-let PI = 3.141592653589793
-let E = 2.718281828459045
-let TAU = 6.283185307179586
-let SQRT2 = 1.414213562373095
+let PI = math_pi()
+let E = math_e()
+let TAU = math_pi() * 2
+let SQRT2 = math_sqrt(2)
 
 function abs(x) {
     return math_abs(x)
@@ -22,7 +22,7 @@ function ceil(x) {
 }
 
 function round(x) {
-    return floor(x + 0.5)
+    return math_round(x)
 }
 
 function clamp(x, min, max) {
@@ -46,53 +46,15 @@ function sqrt(x) {
 }
 
 function pow(base, exp) {
-    if exp == 0 { return 1 }
-    if exp < 0 { return 1 / pow(base, -exp) }
-    let result = 1
-    let i = 0
-    while i < exp {
-        result = result * base
-        i = i + 1
-    }
-    return result
+    return math_pow(base, exp)
 }
 
 function sin(x) {
-    let reduced = x
-    while reduced > PI {
-        reduced = reduced - TAU
-    }
-    while reduced < -PI {
-        reduced = reduced + TAU
-    }
-    let result = 0
-    let term = reduced
-    let n = 1
-    while n < 20 {
-        result = result + term
-        term = -term * reduced * reduced / ((2 * n) * (2 * n + 1))
-        n = n + 1
-    }
-    return result
+    return math_sin(x)
 }
 
 function cos(x) {
-    let reduced = x
-    while reduced > PI {
-        reduced = reduced - TAU
-    }
-    while reduced < -PI {
-        reduced = reduced + TAU
-    }
-    let result = 0
-    let term = 1
-    let n = 0
-    while n < 20 {
-        result = result + term
-        term = -term * reduced * reduced / ((2 * n + 1) * (2 * n + 2))
-        n = n + 1
-    }
-    return result
+    return math_cos(x)
 }
 
 function tan(x) {

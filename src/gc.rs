@@ -5,19 +5,14 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 // Configuration
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub enum GcStrategy {
+    #[default]
     ReferenceCounting,
     MarkAndSweep,
     Generational,
     Arena,
     Manual,
-}
-
-impl Default for GcStrategy {
-    fn default() -> Self {
-        GcStrategy::ReferenceCounting
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -86,18 +81,46 @@ pub struct GcConfigBuilder {
 
 impl GcConfigBuilder {
     pub fn new() -> Self {
-        Self { config: GcConfig::default() }
+        Self {
+            config: GcConfig::default(),
+        }
     }
 
-    pub fn strategy(mut self, s: GcStrategy) -> Self { self.config.strategy = s; self }
-    pub fn heap_size(mut self, s: usize) -> Self { self.config.max_heap_size = s; self }
-    pub fn collection_threshold(mut self, t: f64) -> Self { self.config.collection_threshold = t.clamp(0.1, 0.95); self }
-    pub fn min_collection_interval(mut self, i: Duration) -> Self { self.config.min_collection_interval = i; self }
-    pub fn enable_cycle_detection(mut self, e: bool) -> Self { self.config.enable_cycle_detection = e; self }
-    pub fn verbose(mut self, v: bool) -> Self { self.config.verbose = v; self }
-    pub fn young_gen_size(mut self, s: usize) -> Self { self.config.young_gen_size = s; self }
-    pub fn promotion_threshold(mut self, t: usize) -> Self { self.config.promotion_threshold = t; self }
-    pub fn build(self) -> GcConfig { self.config }
+    pub fn strategy(mut self, s: GcStrategy) -> Self {
+        self.config.strategy = s;
+        self
+    }
+    pub fn heap_size(mut self, s: usize) -> Self {
+        self.config.max_heap_size = s;
+        self
+    }
+    pub fn collection_threshold(mut self, t: f64) -> Self {
+        self.config.collection_threshold = t.clamp(0.1, 0.95);
+        self
+    }
+    pub fn min_collection_interval(mut self, i: Duration) -> Self {
+        self.config.min_collection_interval = i;
+        self
+    }
+    pub fn enable_cycle_detection(mut self, e: bool) -> Self {
+        self.config.enable_cycle_detection = e;
+        self
+    }
+    pub fn verbose(mut self, v: bool) -> Self {
+        self.config.verbose = v;
+        self
+    }
+    pub fn young_gen_size(mut self, s: usize) -> Self {
+        self.config.young_gen_size = s;
+        self
+    }
+    pub fn promotion_threshold(mut self, t: usize) -> Self {
+        self.config.promotion_threshold = t;
+        self
+    }
+    pub fn build(self) -> GcConfig {
+        self.config
+    }
 }
 
 impl Default for GcConfigBuilder {
@@ -124,12 +147,16 @@ pub struct GcStats {
 
 impl GcStats {
     pub fn collection_efficiency(&self) -> f64 {
-        if self.allocations == 0 { return 0.0; }
+        if self.allocations == 0 {
+            return 0.0;
+        }
         self.objects_collected as f64 / self.allocations as f64
     }
 
     pub fn avg_gc_pause_ms(&self) -> f64 {
-        if self.collections == 0 { return 0.0; }
+        if self.collections == 0 {
+            return 0.0;
+        }
         self.gc_time_ms as f64 / self.collections as f64
     }
 }
@@ -168,7 +195,8 @@ struct HeapObject {
 impl HeapObject {
     fn new(id: usize, size: usize) -> Self {
         Self {
-            id, size,
+            id,
+            size,
             ref_count: Cell::new(1),
             color: Cell::new(Color::White),
             marked: Cell::new(false),
@@ -187,19 +215,28 @@ struct Arena {
 
 impl Arena {
     fn new(size: usize) -> Self {
-        Self { buffer: vec![0u8; size], offset: Cell::new(0) }
+        Self {
+            buffer: vec![0u8; size],
+            offset: Cell::new(0),
+        }
     }
 
     fn allocate(&self, size: usize) -> Option<usize> {
         let offset = self.offset.get();
-        if offset + size > self.buffer.len() { return None; }
+        if offset + size > self.buffer.len() {
+            return None;
+        }
         self.offset.set(offset + size);
         Some(offset)
     }
 
-    fn reset(&self) { self.offset.set(0); }
+    fn reset(&self) {
+        self.offset.set(0);
+    }
 
-    fn used(&self) -> usize { self.offset.get() }
+    fn used(&self) -> usize {
+        self.offset.get()
+    }
 }
 
 // Generational Heap
@@ -210,11 +247,20 @@ struct GenHeap {
 }
 
 impl GenHeap {
-    fn new() -> Self { Self { young: HashSet::new(), old: HashSet::new() } }
-    fn add(&mut self, id: usize) { self.young.insert(id); }
+    fn new() -> Self {
+        Self {
+            young: HashSet::new(),
+            old: HashSet::new(),
+        }
+    }
+    fn add(&mut self, id: usize) {
+        self.young.insert(id);
+    }
 
     #[allow(dead_code)]
-    fn young_count(&self) -> usize { self.young.len() }
+    fn young_count(&self) -> usize {
+        self.young.len()
+    }
 }
 
 // Garbage Collector
@@ -234,11 +280,15 @@ impl GarbageCollector {
     pub fn new(config: GcConfig) -> Self {
         let arena = if config.strategy == GcStrategy::Arena {
             Some(Arena::new(config.max_heap_size))
-        } else { None };
+        } else {
+            None
+        };
 
         let gen_heap = if config.strategy == GcStrategy::Generational {
             Some(GenHeap::new())
-        } else { None };
+        } else {
+            None
+        };
 
         Self {
             config,
@@ -253,15 +303,31 @@ impl GarbageCollector {
         }
     }
 
-    pub fn with_defaults() -> Self { Self::new(GcConfig::default()) }
-    pub fn for_server() -> Self { Self::new(GcConfig::for_server()) }
-    pub fn for_cli() -> Self { Self::new(GcConfig::for_cli()) }
-    pub fn for_embedded() -> Self { Self::new(GcConfig::for_embedded()) }
+    pub fn with_defaults() -> Self {
+        Self::new(GcConfig::default())
+    }
+    pub fn for_server() -> Self {
+        Self::new(GcConfig::for_server())
+    }
+    pub fn for_cli() -> Self {
+        Self::new(GcConfig::for_cli())
+    }
+    pub fn for_embedded() -> Self {
+        Self::new(GcConfig::for_embedded())
+    }
 
-    pub fn config(&self) -> &GcConfig { &self.config }
-    pub fn stats(&self) -> &GcStats { &self.stats }
-    pub fn set_enabled(&self, e: bool) { self.enabled.set(e); }
-    pub fn is_enabled(&self) -> bool { self.enabled.get() }
+    pub fn config(&self) -> &GcConfig {
+        &self.config
+    }
+    pub fn stats(&self) -> &GcStats {
+        &self.stats
+    }
+    pub fn set_enabled(&self, e: bool) {
+        self.enabled.set(e);
+    }
+    pub fn is_enabled(&self) -> bool {
+        self.enabled.get()
+    }
 
     pub fn allocate(&mut self, size: usize) -> usize {
         let id = self.next_id.get();
@@ -277,7 +343,9 @@ impl GarbageCollector {
         }
 
         self.objects.insert(id, HeapObject::new(id, size));
-        if let Some(ref mut gh) = self.gen_heap { gh.add(id); }
+        if let Some(ref mut gh) = self.gen_heap {
+            gh.add(id);
+        }
 
         self.stats.allocations += 1;
         self.stats.heap_used += size;
@@ -352,7 +420,9 @@ impl GarbageCollector {
     }
 
     pub fn collect(&mut self) {
-        if !self.enabled.get() { return; }
+        if !self.enabled.get() {
+            return;
+        }
 
         let start = Instant::now();
 
@@ -472,19 +542,24 @@ impl GarbageCollector {
     }
 
     fn maybe_collect(&mut self) {
-        let threshold = (self.config.max_heap_size as f64 * self.config.collection_threshold) as usize;
+        let threshold =
+            (self.config.max_heap_size as f64 * self.config.collection_threshold) as usize;
         if self.stats.heap_used >= threshold {
             self.collect();
         }
     }
 
     fn collect_refcount(&mut self) {
-        let zero_ref: Vec<usize> = self.objects.iter()
+        let zero_ref: Vec<usize> = self
+            .objects
+            .iter()
             .filter(|(_, o)| o.ref_count.get() == 0 && !o.is_root.get())
             .map(|(&id, _)| id)
             .collect();
 
-        for id in zero_ref { self.deallocate(id); }
+        for id in zero_ref {
+            self.deallocate(id);
+        }
     }
 
     fn collect_mark_sweep(&mut self) {
@@ -494,22 +569,30 @@ impl GarbageCollector {
         }
 
         let roots: Vec<usize> = self.roots.iter().copied().collect();
-        for id in roots { self.mark(id); }
+        for id in roots {
+            self.mark(id);
+        }
 
         // Sweep
-        let unmarked: Vec<usize> = self.objects.iter()
+        let unmarked: Vec<usize> = self
+            .objects
+            .iter()
             .filter(|(_, o)| !o.marked.get() && !o.is_root.get())
             .map(|(&id, _)| id)
             .collect();
 
-        for id in unmarked { self.deallocate(id); }
+        for id in unmarked {
+            self.deallocate(id);
+        }
     }
 
     fn mark(&mut self, id: usize) {
         let mut stack = vec![id];
         while let Some(cur) = stack.pop() {
             if let Some(obj) = self.objects.get_mut(&cur) {
-                if obj.marked.get() { continue; }
+                if obj.marked.get() {
+                    continue;
+                }
                 obj.marked.set(true);
             }
             if let Some(children) = self.children.get(&cur).cloned() {
@@ -530,7 +613,9 @@ impl GarbageCollector {
             }
 
             // Deallocate after iteration to avoid borrow issues
-            let to_remove: Vec<usize> = self.objects.iter()
+            let to_remove: Vec<usize> = self
+                .objects
+                .iter()
                 .filter(|(_, o)| o.ref_count.get() == 0)
                 .map(|(&id, _)| id)
                 .collect();
@@ -554,12 +639,18 @@ impl GarbageCollector {
         (self.stats.heap_used as f64 / self.config.max_heap_size as f64) * 100.0
     }
 
-    pub fn object_count(&self) -> usize { self.objects.len() }
-    pub fn root_count(&self) -> usize { self.roots.len() }
+    pub fn object_count(&self) -> usize {
+        self.objects.len()
+    }
+    pub fn root_count(&self) -> usize {
+        self.roots.len()
+    }
 }
 
 impl Default for GarbageCollector {
-    fn default() -> Self { Self::with_defaults() }
+    fn default() -> Self {
+        Self::with_defaults()
+    }
 }
 
 // GcPtr - GC managed pointer
@@ -570,7 +661,9 @@ pub struct GcPtr<T> {
 impl<T> GcPtr<T> {
     pub fn new(value: T, gc: &mut GarbageCollector) -> Self {
         let _ = gc.allocate(std::mem::size_of::<T>());
-        Self { inner: std::rc::Rc::new(value) }
+        Self {
+            inner: std::rc::Rc::new(value),
+        }
     }
 
     pub fn strong_count(&self) -> usize {
@@ -580,13 +673,17 @@ impl<T> GcPtr<T> {
 
 impl<T> Clone for GcPtr<T> {
     fn clone(&self) -> Self {
-        Self { inner: std::rc::Rc::clone(&self.inner) }
+        Self {
+            inner: std::rc::Rc::clone(&self.inner),
+        }
     }
 }
 
 impl<T> std::ops::Deref for GcPtr<T> {
     type Target = T;
-    fn deref(&self) -> &Self::Target { &self.inner }
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 // Tests
@@ -658,7 +755,9 @@ mod tests {
     #[test]
     fn test_gc_generational() {
         let mut gc = GarbageCollector::for_server();
-        for _ in 0..100 { gc.allocate(1000); }
+        for _ in 0..100 {
+            gc.allocate(1000);
+        }
         assert!(gc.gen_heap.is_some());
         assert!(gc.gen_heap.as_ref().unwrap().young_count() > 0);
     }
@@ -669,8 +768,8 @@ mod tests {
         let id1 = gc.allocate(100);
         let id2 = gc.allocate(200);
         assert!(gc.arena.is_some());
-        assert!(id1 >= 0);
-        assert!(id2 >= 0);
+        assert_ne!(id1, id2);
+        assert_eq!(gc.object_count(), 2);
         gc.reset_arena();
         assert_eq!(gc.stats.heap_used, 0);
     }
@@ -680,7 +779,9 @@ mod tests {
         let mut gc = GarbageCollector::with_defaults();
         for i in 0..10 {
             let id = gc.allocate(100);
-            if i % 2 == 0 { gc.deallocate(id); }
+            if i % 2 == 0 {
+                gc.deallocate(id);
+            }
         }
         assert_eq!(gc.stats.allocations, 10);
         assert_eq!(gc.stats.deallocations, 5);
@@ -744,7 +845,9 @@ mod tests {
             ..Default::default()
         });
 
-        for _ in 0..10 { gc.allocate(100); }
+        for _ in 0..10 {
+            gc.allocate(100);
+        }
         assert!(gc.stats.collections > 0);
     }
 

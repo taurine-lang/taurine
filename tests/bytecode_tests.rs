@@ -1,6 +1,6 @@
 use taurine::bytecode::{Compiler, VirtualMachine};
-use taurine::parser::Parser;
 use taurine::lexer::tokenize;
+use taurine::parser::Parser;
 
 fn run_bytecode(code: &str) -> Result<(), String> {
     let tokens = tokenize(code);
@@ -34,8 +34,11 @@ fn test_bytecode_comparison() {
 #[test]
 fn test_bytecode_variables() {
     assert!(run_bytecode("let x = 42").is_ok());
-    assert!(run_bytecode("let x = 42
-let y = x + 1").is_ok());
+    assert!(run_bytecode(
+        "let x = 42
+let y = x + 1"
+    )
+    .is_ok());
 }
 
 #[test]
@@ -47,8 +50,11 @@ fn test_bytecode_strings() {
 #[test]
 fn test_bytecode_arrays() {
     assert!(run_bytecode("let arr = [1, 2, 3]").is_ok());
-    assert!(run_bytecode("let arr = [1, 2, 3]
-let x = arr[0]").is_ok());
+    assert!(run_bytecode(
+        "let arr = [1, 2, 3]
+let x = arr[0]"
+    )
+    .is_ok());
 }
 #[test]
 fn test_bytecode_tables() {
@@ -64,8 +70,11 @@ fn test_bytecode_if_else() {
 
 #[test]
 fn test_bytecode_while_loop() {
-    assert!(run_bytecode("let x = 0
-while x < 5 { x = x + 1 }").is_ok());
+    assert!(run_bytecode(
+        "let x = 0
+while x < 5 { x = x + 1 }"
+    )
+    .is_ok());
 }
 
 #[test]
@@ -75,10 +84,13 @@ fn test_bytecode_function_declaration() {
 
 #[test]
 fn test_bytecode_function_call() {
-    assert!(run_bytecode(r#"
+    assert!(run_bytecode(
+        r#"
 function add(a, b) { return a + b }
 let result = add(10, 20)
-"#).is_ok());
+"#
+    )
+    .is_ok());
 }
 
 #[test]
@@ -105,11 +117,14 @@ fn test_bytecode_for_in() {
 
 #[test]
 fn test_bytecode_class() {
-    assert!(run_bytecode(r#"
+    assert!(run_bytecode(
+        r#"
 class Dog {
     function bark() { return "Woof" }
 }
-"#).is_ok());
+"#
+    )
+    .is_ok());
 }
 
 #[test]
@@ -119,9 +134,12 @@ fn test_bytecode_empty_program() {
 
 #[test]
 fn test_bytecode_multiple_statements() {
-    assert!(run_bytecode("let a = 1
+    assert!(run_bytecode(
+        "let a = 1
 let b = 2
-let c = a + b").is_ok());
+let c = a + b"
+    )
+    .is_ok());
 }
 
 #[test]
@@ -131,21 +149,30 @@ fn test_bytecode_nested_if() {
 
 #[test]
 fn test_bytecode_index_access() {
-    assert!(run_bytecode("let arr = [1, 2, 3]
-let x = arr[0]").is_ok());
+    assert!(run_bytecode(
+        "let arr = [1, 2, 3]
+let x = arr[0]"
+    )
+    .is_ok());
 }
 
 #[test]
 fn test_bytecode_property_access() {
-    assert!(run_bytecode(r#"let obj = { name: "test" }
-let x = obj.name"#).is_ok());
+    assert!(run_bytecode(
+        r#"let obj = { name: "test" }
+let x = obj.name"#
+    )
+    .is_ok());
 }
 
 #[test]
 fn test_bytecode_break_continue() {
-    assert!(run_bytecode("let x = 0
+    assert!(run_bytecode(
+        "let x = 0
 while true { x = x + 1
-if x > 5 { break } }").is_ok());
+if x > 5 { break } }"
+    )
+    .is_ok());
 }
 
 #[test]

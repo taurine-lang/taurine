@@ -1,6 +1,6 @@
+use taurine::ast::{Expr, Stmt};
 use taurine::lexer::tokenize;
 use taurine::parser::Parser;
-use taurine::ast::{Stmt, Expr};
 
 fn parse(code: &str) -> Result<Vec<Stmt>, String> {
     let tokens = tokenize(code);
@@ -59,7 +59,10 @@ fn test_for_in_loop() {
 fn test_array_literal() {
     let stmts = parse("let arr = [1, 2, 3]").unwrap();
     match &stmts[0] {
-        Stmt::Declaration { initializer: Some(Expr::Array { items, .. }), .. } => {
+        Stmt::Declaration {
+            initializer: Some(Expr::Array { items, .. }),
+            ..
+        } => {
             assert_eq!(items.len(), 3);
         }
         _ => panic!("Expected Array"),
@@ -70,7 +73,10 @@ fn test_array_literal() {
 fn test_table_literal() {
     let stmts = parse(r#"let obj = { name: "test", value: 42 }"#).unwrap();
     match &stmts[0] {
-        Stmt::Declaration { initializer: Some(Expr::Table { entries, .. }), .. } => {
+        Stmt::Declaration {
+            initializer: Some(Expr::Table { entries, .. }),
+            ..
+        } => {
             assert_eq!(entries.len(), 2);
         }
         _ => panic!("Expected Table"),
@@ -81,7 +87,10 @@ fn test_table_literal() {
 fn test_lambda() {
     let stmts = parse("let add = (x, y) => x + y").unwrap();
     match &stmts[0] {
-        Stmt::Declaration { initializer: Some(Expr::Lambda { params, .. }), .. } => {
+        Stmt::Declaration {
+            initializer: Some(Expr::Lambda { params, .. }),
+            ..
+        } => {
             assert_eq!(params.len(), 2);
         }
         _ => panic!("Expected Lambda"),
@@ -110,7 +119,10 @@ fn test_import() {
 fn test_match_expression() {
     let stmts = parse(r#"let result = match x { 0 => "zero", _ => "other" }"#).unwrap();
     match &stmts[0] {
-        Stmt::Declaration { initializer: Some(Expr::Match { arms, .. }), .. } => {
+        Stmt::Declaration {
+            initializer: Some(Expr::Match { arms, .. }),
+            ..
+        } => {
             assert_eq!(arms.len(), 2);
         }
         _ => panic!("Expected Match"),
@@ -127,7 +139,10 @@ fn test_async_function() {
 fn test_null_coalesce() {
     let stmts = parse("let x = a ?? b").unwrap();
     match &stmts[0] {
-        Stmt::Declaration { initializer: Some(Expr::NullCoalesce { .. }), .. } => {}
+        Stmt::Declaration {
+            initializer: Some(Expr::NullCoalesce { .. }),
+            ..
+        } => {}
         _ => panic!("Expected NullCoalesce"),
     }
 }
@@ -136,7 +151,10 @@ fn test_null_coalesce() {
 fn test_safe_navigation() {
     let stmts = parse("let x = obj?.prop").unwrap();
     match &stmts[0] {
-        Stmt::Declaration { initializer: Some(Expr::SafeGet { .. }), .. } => {}
+        Stmt::Declaration {
+            initializer: Some(Expr::SafeGet { .. }),
+            ..
+        } => {}
         _ => panic!("Expected SafeGet"),
     }
 }
@@ -145,7 +163,10 @@ fn test_safe_navigation() {
 fn test_spread_operator() {
     let stmts = parse("let arr = [...other, 4, 5]").unwrap();
     match &stmts[0] {
-        Stmt::Declaration { initializer: Some(Expr::Array { items, .. }), .. } => {
+        Stmt::Declaration {
+            initializer: Some(Expr::Array { items, .. }),
+            ..
+        } => {
             assert!(matches!(&items[0], Expr::Spread { .. }));
         }
         _ => panic!("Expected Array with Spread"),
@@ -167,7 +188,10 @@ fn test_return_multi() {
 fn test_fstring() {
     let stmts = parse(r#"let s = f"Hello {name}""#).unwrap();
     match &stmts[0] {
-        Stmt::Declaration { initializer: Some(Expr::FString { .. }), .. } => {}
+        Stmt::Declaration {
+            initializer: Some(Expr::FString { .. }),
+            ..
+        } => {}
         _ => panic!("Expected FString"),
     }
 }
@@ -176,7 +200,10 @@ fn test_fstring() {
 fn test_range() {
     let stmts = parse("let r = 1..10").unwrap();
     match &stmts[0] {
-        Stmt::Declaration { initializer: Some(Expr::Range { .. }), .. } => {}
+        Stmt::Declaration {
+            initializer: Some(Expr::Range { .. }),
+            ..
+        } => {}
         _ => panic!("Expected Range"),
     }
 }
@@ -185,7 +212,10 @@ fn test_range() {
 fn test_length_operator() {
     let stmts = parse("let len = #arr").unwrap();
     match &stmts[0] {
-        Stmt::Declaration { initializer: Some(Expr::Length { .. }), .. } => {}
+        Stmt::Declaration {
+            initializer: Some(Expr::Length { .. }),
+            ..
+        } => {}
         _ => panic!("Expected Length"),
     }
 }
@@ -217,7 +247,10 @@ fn test_default_parameters() {
 fn test_await() {
     let stmts = parse("let x = await promise").unwrap();
     match &stmts[0] {
-        Stmt::Declaration { initializer: Some(Expr::Await { .. }), .. } => {}
+        Stmt::Declaration {
+            initializer: Some(Expr::Await { .. }),
+            ..
+        } => {}
         _ => panic!("Expected Await"),
     }
 }
@@ -226,7 +259,10 @@ fn test_await() {
 fn test_new_instance() {
     let stmts = parse("let obj = new MyClass()").unwrap();
     match &stmts[0] {
-        Stmt::Declaration { initializer: Some(Expr::NewInstance { .. }), .. } => {}
+        Stmt::Declaration {
+            initializer: Some(Expr::NewInstance { .. }),
+            ..
+        } => {}
         _ => panic!("Expected NewInstance"),
     }
 }
@@ -235,12 +271,10 @@ fn test_new_instance() {
 fn test_this() {
     let stmts = parse("function f() { return this }").unwrap();
     match &stmts[0] {
-        Stmt::Function { body, .. } => {
-            match &body[0] {
-                Stmt::Return(Some(Expr::This { .. })) => {}
-                _ => panic!("Expected This"),
-            }
-        }
+        Stmt::Function { body, .. } => match &body[0] {
+            Stmt::Return(Some(Expr::This { .. })) => {}
+            _ => panic!("Expected This"),
+        },
         _ => panic!("Expected Function"),
     }
 }

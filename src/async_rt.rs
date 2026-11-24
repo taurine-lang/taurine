@@ -4,9 +4,9 @@
 //! It allows non-blocking I/O operations and concurrent execution.
 
 #[cfg(feature = "async")]
-use tokio::runtime::Runtime;
-#[cfg(feature = "async")]
 use std::sync::Arc;
+#[cfg(feature = "async")]
+use tokio::runtime::Runtime;
 #[cfg(feature = "async")]
 use tokio::sync::Mutex;
 
@@ -21,9 +21,9 @@ pub struct AsyncRuntime {
 impl AsyncRuntime {
     /// Create a new async runtime
     pub fn new() -> Result<Self, String> {
-        let runtime = Runtime::new()
-            .map_err(|e| format!("Failed to create Tokio runtime: {}", e))?;
-        
+        let runtime =
+            Runtime::new().map_err(|e| format!("Failed to create Tokio runtime: {}", e))?;
+
         Ok(Self {
             runtime: Arc::new(runtime),
             task_count: Arc::new(Mutex::new(0)),
@@ -91,7 +91,7 @@ impl Default for AsyncRuntime {
 #[cfg(feature = "async")]
 #[derive(Clone)]
 pub struct FutureValue {
-    inner: Arc<tokio::sync::broadcast::Sender<crate::value::Value>>,
+    inner: std::rc::Rc<tokio::sync::broadcast::Sender<crate::value::Value>>,
 }
 
 #[cfg(feature = "async")]
@@ -101,7 +101,7 @@ impl FutureValue {
         let (tx, _rx) = tokio::sync::broadcast::channel(16);
         let _ = tx.send(value);
         Self {
-            inner: Arc::new(tx),
+            inner: std::rc::Rc::new(tx),
         }
     }
 
@@ -113,7 +113,7 @@ impl FutureValue {
 
     /// Check if value is ready
     pub fn is_ready(&self) -> bool {
-        true  // Simplified for now
+        true // Simplified for now
     }
 }
 

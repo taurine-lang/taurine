@@ -1,8 +1,7 @@
-use taurine::safety::{
-    SecurityContext, SecurityLevel, Permissions,
-    InputValidator, ResourceTracker, SecurityError,
-};
 use std::time::Duration;
+use taurine::safety::{
+    InputValidator, Permissions, ResourceTracker, SecurityContext, SecurityError, SecurityLevel,
+};
 
 #[test]
 fn test_security_levels_ordering() {
@@ -121,8 +120,10 @@ fn test_permissions_restricted() {
 
 #[test]
 fn test_permissions_allowed_paths() {
-    let mut perms = Permissions::default();
-    perms.allow_fs = true;
+    let mut perms = Permissions {
+        allow_fs: true,
+        ..Default::default()
+    };
     perms.allowed_paths.insert("/safe".to_string());
     perms.allowed_paths.insert("/tmp".to_string());
 
@@ -133,8 +134,10 @@ fn test_permissions_allowed_paths() {
 
 #[test]
 fn test_permissions_allowed_hosts() {
-    let mut perms = Permissions::default();
-    perms.allow_network = true;
+    let mut perms = Permissions {
+        allow_network: true,
+        ..Default::default()
+    };
     perms.allowed_hosts.insert("api.".to_string());
     perms.allowed_hosts.insert("trusted.com".to_string());
 
@@ -191,7 +194,7 @@ fn test_input_validator_invalid_identifier() {
 #[test]
 fn test_input_validator_valid_number() {
     assert!(InputValidator::validate_number(42.0).is_ok());
-    assert!(InputValidator::validate_number(-3.14).is_ok());
+    assert!(InputValidator::validate_number(-2.5).is_ok());
     assert!(InputValidator::validate_number(0.0).is_ok());
 }
 
@@ -245,7 +248,10 @@ fn test_security_error_display() {
     let err = SecurityError::PathNotAllowed("/forbidden".to_string());
     assert!(err.to_string().contains("/forbidden"));
 
-    let err = SecurityError::FileSizeExceeded { size: 2000, max: 1000 };
+    let err = SecurityError::FileSizeExceeded {
+        size: 2000,
+        max: 1000,
+    };
     assert!(err.to_string().contains("2000"));
     assert!(err.to_string().contains("1000"));
 
@@ -296,4 +302,54 @@ fn test_network_size_validation() {
 
     let large_size = 10 * 1024 * 1024;
     assert!(ctx.validate_network_size(large_size).is_err());
+}
+
+#[test]
+fn test_security_blocks_io_exit() {
+    use taurine::safety::{SecurityContext, SecurityLevel};
+    let mut ctx = SecurityContext::new();
+    ctx.apply_level(&SecurityLevel::Sandbox);
+    assert!(!ctx.is_function_allowed("io_exit"));
+}
+
+#[test]
+fn test_security_blocks_math_allowed_in_sandbox() {
+    use taurine::safety::{SecurityContext, SecurityLevel};
+    let mut ctx = SecurityContext::new();
+    ctx.apply_level(&SecurityLevel::Sandbox);
+    assert!(ctx.is_function_allowed("math_floor"));
+    assert!(ctx.is_function_allowed("math_sqrt"));
+}
+
+#[test]
+fn test_input_validator_null_bytes() {
+    assert!(InputValidator::validate_string("hello\x00world", 100).is_err());
+}
+
+#[test]
+fn test_input_validator_data_uri() {
+    assert!(InputValidator::validate_string("data:text/html,<script>", 100).is_err());
+}
+
+#[test]
+fn test_input_validator_path_traversal_backslash() {
+    assert!(InputValidator::validate_string("..\\..\\windows\\system32", 100).is_err());
+}
+
+#[test]
+fn test_sandbox_blocks_absolute_path() {
+    use taurine::safety::{SecurityContext, SecurityLevel};
+    let mut ctx = SecurityContext::new();
+    ctx.apply_level(&SecurityLevel::Sandbox);
+    let result = ctx.validate_path("/etc/shadow");
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_sandbox_blocks_private_network() {
+    use taurine::safety::{SecurityContext, SecurityLevel};
+    let mut ctx = SecurityContext::new();
+    ctx.apply_level(&SecurityLevel::Sandbox);
+    let result = ctx.validate_host("192.168.1.1");
+    assert!(result.is_err());
 }

@@ -1,9 +1,9 @@
 //! Environment management
-use indexmap::IndexMap;
-use std::rc::{Rc, Weak};
-use std::cell::RefCell;
-use crate::value::Value;
 use crate::string_intern::InternedString;
+use crate::value::Value;
+use indexmap::IndexMap;
+use std::cell::RefCell;
+use std::rc::{Rc, Weak};
 
 #[derive(Clone, Debug)]
 pub struct Environment {
@@ -39,7 +39,11 @@ impl Environment {
     }
 
     pub fn all_entries(&self) -> Vec<(usize, Value)> {
-        self.values.borrow().iter().map(|(k, v)| (*k, v.clone())).collect()
+        self.values
+            .borrow()
+            .iter()
+            .map(|(k, v)| (*k, v.clone()))
+            .collect()
     }
 
     pub fn define_raw(&mut self, id: usize, value: Value) {
@@ -66,18 +70,31 @@ impl Environment {
             if let Some(parent) = weak_parent.upgrade() {
                 return parent.borrow().get(name);
             }
+            return Err(format!(
+                "Undefined variable: {} (parent scope no longer exists)",
+                name.id()
+            ));
         }
         Err(format!("Undefined variable: {}", name.id()))
     }
 
     pub fn assign(&mut self, name: &InternedString, value: Value) -> Result<(), String> {
-        if self.values.borrow_mut().insert(name.id(), value.clone()).is_some() {
+        if self
+            .values
+            .borrow_mut()
+            .insert(name.id(), value.clone())
+            .is_some()
+        {
             return Ok(());
         }
         if let Some(weak_parent) = &self.parent {
             if let Some(parent) = weak_parent.upgrade() {
                 return parent.borrow_mut().assign(name, value);
             }
+            return Err(format!(
+                "Undefined variable: {} (parent scope no longer exists)",
+                name.id()
+            ));
         }
         Err(format!("Undefined variable: {}", name.id()))
     }

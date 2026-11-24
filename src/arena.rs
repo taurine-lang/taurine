@@ -2,8 +2,8 @@
 //! This module provides arena-based allocation for AST nodes to reduce
 //! memory fragmentation and improve allocation performance.
 
+use crate::ast::{Expr, MatchArm, Pattern, Stmt};
 use typed_arena::Arena;
-use crate::ast::{Expr, Stmt, MatchArm, Pattern};
 
 pub struct AstArena {
     expr_arena: Arena<Expr>,
@@ -123,16 +123,15 @@ impl Default for AstArena {
     }
 }
 
-
 pub trait IntoArena<'a> {
     type ArenaRef;
-    
+
     fn into_arena(self, arena: &'a AstArena) -> Self::ArenaRef;
 }
 
 impl<'a> IntoArena<'a> for Expr {
     type ArenaRef = &'a Expr;
-    
+
     fn into_arena(self, arena: &'a AstArena) -> Self::ArenaRef {
         arena.alloc_expr(self)
     }
@@ -140,7 +139,7 @@ impl<'a> IntoArena<'a> for Expr {
 
 impl<'a> IntoArena<'a> for Stmt {
     type ArenaRef = &'a Stmt;
-    
+
     fn into_arena(self, arena: &'a AstArena) -> Self::ArenaRef {
         arena.alloc_stmt(self)
     }
@@ -179,11 +178,11 @@ mod tests {
     #[test]
     fn test_arena_lifetime() {
         let arena = AstArena::new();
-        
+
         // Allocate some expressions
         let expr1 = arena.alloc_expr(Expr::Number(1.0));
         let expr2 = arena.alloc_expr(Expr::String("test".to_string()));
-        
+
         // They should both be valid
         assert!(matches!(expr1, Expr::Number(1.0)));
         assert!(matches!(expr2, Expr::String(_)));
@@ -192,17 +191,17 @@ mod tests {
     #[test]
     fn test_arena_binary_expr() {
         let arena = AstArena::new();
-        
+
         let left = arena.alloc_expr(Expr::Number(1.0));
         let right = arena.alloc_expr(Expr::Number(2.0));
-        
+
         let binary = arena.alloc_expr(Expr::Binary {
             left: Box::new(left.clone()),
             op: TokenKind::Plus,
             right: Box::new(right.clone()),
             line: 1,
         });
-        
+
         assert!(matches!(binary, Expr::Binary { .. }));
     }
 

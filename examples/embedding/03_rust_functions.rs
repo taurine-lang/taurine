@@ -3,8 +3,8 @@
 //
 // Run with: cargo run --example 03_rust_functions
 
-use taurine::Interpreter;
 use std::path::PathBuf;
+use taurine::Interpreter;
 
 fn main() -> Result<(), String> {
     println!("Using Taurine from Rust\n");
@@ -12,7 +12,8 @@ fn main() -> Result<(), String> {
     let mut interp = Interpreter::new(PathBuf::from("."));
 
     // Run Taurine code with various features
-    interp.run(r#"
+    interp.run(
+        r#"
         print("Using Taurine features:")
         print("")
 
@@ -42,7 +43,8 @@ fn main() -> Result<(), String> {
         for i in 1..6 {
             print(f"  {i}")
         }
-    "#)?;
+    "#,
+    )?;
 
     println!("\nSuccess!");
 

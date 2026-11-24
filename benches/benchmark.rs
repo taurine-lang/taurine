@@ -1,8 +1,8 @@
-use std::time::Instant;
-use taurine::{Interpreter, Optimizer, SafetyLimits, StringInterner};
-use taurine::parser::Parser;
-use taurine::lexer::{tokenize, tokenize_with_interner};
 use std::path::PathBuf;
+use std::time::Instant;
+use taurine::lexer::{tokenize, tokenize_with_interner};
+use taurine::parser::Parser;
+use taurine::{Interpreter, Optimizer, SafetyLimits, StringInterner};
 
 fn no_timeout_limits() -> SafetyLimits {
     SafetyLimits {
@@ -60,7 +60,11 @@ print(f"Loop sum: {sum}")
         let _ = interp.run(code);
     }
     let elapsed = start.elapsed();
-    println!("    100 iterations (1000 loop): {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 100.0);
+    println!(
+        "    100 iterations (1000 loop): {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 100.0
+    );
 }
 
 fn benchmark_function_calls() {
@@ -83,7 +87,11 @@ print(f"Function result: {result}")
         let _ = interp.run(code);
     }
     let elapsed = start.elapsed();
-    println!("    100 iterations (100 calls): {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 100.0);
+    println!(
+        "    100 iterations (100 calls): {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 100.0
+    );
 }
 
 fn benchmark_array() {
@@ -104,7 +112,11 @@ print(f"Array length: {len}")
         let _ = interp.run(code);
     }
     let elapsed = start.elapsed();
-    println!("    100 iterations (100 push): {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 100.0);
+    println!(
+        "    100 iterations (100 push): {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 100.0
+    );
 }
 
 fn benchmark_table() {
@@ -125,7 +137,11 @@ print(f"Table value: {val}")
         let _ = interp.run(code);
     }
     let elapsed = start.elapsed();
-    println!("    100 iterations (50 inserts): {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 100.0);
+    println!(
+        "    100 iterations (50 inserts): {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 100.0
+    );
 }
 
 fn benchmark_string() {
@@ -145,7 +161,11 @@ print(f"String length: {#str}")
         let _ = interp.run(code);
     }
     let elapsed = start.elapsed();
-    println!("    100 iterations (50 concat): {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 100.0);
+    println!(
+        "    100 iterations (50 concat): {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 100.0
+    );
 }
 
 fn benchmark_optimizer() {
@@ -187,8 +207,16 @@ if true {
     }
     let elapsed_opt = start.elapsed();
 
-    println!("    Without optimization: {:.2?} ({:.2} µs/iter)", elapsed_no_opt, elapsed_no_opt.as_micros() as f64 / 100.0);
-    println!("    With optimization:    {:.2?} ({:.2} µs/iter)", elapsed_opt, elapsed_opt.as_micros() as f64 / 100.0);
+    println!(
+        "    Without optimization: {:.2?} ({:.2} µs/iter)",
+        elapsed_no_opt,
+        elapsed_no_opt.as_micros() as f64 / 100.0
+    );
+    println!(
+        "    With optimization:    {:.2?} ({:.2} µs/iter)",
+        elapsed_opt,
+        elapsed_opt.as_micros() as f64 / 100.0
+    );
 
     if elapsed_opt < elapsed_no_opt {
         let speedup = elapsed_no_opt.as_secs_f64() / elapsed_opt.as_secs_f64();
@@ -220,8 +248,16 @@ print(f"Result: {result}")
     }
     let elapsed_with_intern = start.elapsed();
 
-    println!("    Without interning: {:.2?} ({:.2} µs/iter)", elapsed_no_intern, elapsed_no_intern.as_micros() as f64 / 1000.0);
-    println!("    With interning:    {:.2?} ({:.2} µs/iter)", elapsed_with_intern, elapsed_with_intern.as_micros() as f64 / 1000.0);
+    println!(
+        "    Without interning: {:.2?} ({:.2} µs/iter)",
+        elapsed_no_intern,
+        elapsed_no_intern.as_micros() as f64 / 1000.0
+    );
+    println!(
+        "    With interning:    {:.2?} ({:.2} µs/iter)",
+        elapsed_with_intern,
+        elapsed_with_intern.as_micros() as f64 / 1000.0
+    );
 
     let mut interner = StringInterner::with_capacity(64);
     let _tokens = tokenize_with_interner(code, &mut interner);
@@ -251,7 +287,11 @@ let result = test(d, e)
         let _ = parser.parse();
     }
     let elapsed = start.elapsed();
-    println!("    Parser: {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 1000.0);
+    println!(
+        "    Parser: {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 1000.0
+    );
 }
 
 fn benchmark_lexer() {
@@ -287,7 +327,11 @@ print(f"Result: {result}")
         let _tokens = tokenize(small_code);
     }
     let elapsed = start.elapsed();
-    println!("      {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 10000.0);
+    println!(
+        "      {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 10000.0
+    );
 
     println!("    Medium program ({} chars):", medium_code.len());
     let start = Instant::now();
@@ -295,7 +339,11 @@ print(f"Result: {result}")
         let _tokens = tokenize(medium_code);
     }
     let elapsed = start.elapsed();
-    println!("      {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 1000.0);
+    println!(
+        "      {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 1000.0
+    );
 
     println!("    Large program ({} chars):", large_code.len());
     let start = Instant::now();
@@ -303,7 +351,11 @@ print(f"Result: {result}")
         let _tokens = tokenize(large_code);
     }
     let elapsed = start.elapsed();
-    println!("      {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 100.0);
+    println!(
+        "      {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 100.0
+    );
 }
 
 fn benchmark_parser() {
@@ -325,7 +377,11 @@ print(f"Factorial(5) = {result}")
         let _ = parser.parse();
     }
     let elapsed = start.elapsed();
-    println!("    Standard parser: {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 1000.0);
+    println!(
+        "    Standard parser: {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 1000.0
+    );
 
     let start = Instant::now();
     for _ in 0..1000 {
@@ -335,7 +391,11 @@ print(f"Factorial(5) = {result}")
         let _ = parser.parse();
     }
     let elapsed = start.elapsed();
-    println!("    With interner:   {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 1000.0);
+    println!(
+        "    With interner:   {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 1000.0
+    );
 }
 
 fn benchmark_interpreter_vs_bytecode() {
@@ -361,7 +421,11 @@ fn benchmark_gc_cycle_detection() {
         gc.collect_full();
     }
     let elapsed = start.elapsed();
-    println!("    100 iterations (cycle detect): {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 100.0);
+    println!(
+        "    100 iterations (cycle detect): {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 100.0
+    );
 }
 
 fn benchmark_json_operations() {
@@ -379,7 +443,11 @@ print(f"JSON length: {#json}")
         let _ = interp.run(code);
     }
     let elapsed = start.elapsed();
-    println!("    100 iterations (parse+stringify): {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 100.0);
+    println!(
+        "    100 iterations (parse+stringify): {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 100.0
+    );
 }
 
 fn benchmark_fstring() {
@@ -398,12 +466,15 @@ print(msg)
         let _ = interp.run(code);
     }
     let elapsed = start.elapsed();
-    println!("    1000 iterations: {:.2?} ({:.2} µs/iter)", elapsed, elapsed.as_micros() as f64 / 1000.0);
+    println!(
+        "    1000 iterations: {:.2?} ({:.2} µs/iter)",
+        elapsed,
+        elapsed.as_micros() as f64 / 1000.0
+    );
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn test_benchmark_runs() {

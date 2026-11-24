@@ -9,16 +9,13 @@
 //! - Faster identifier lookup in parser and interpreter
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::hash::BuildHasherDefault;
+use std::sync::Arc;
 use twox_hash::XxHash64;
-
 
 const DEFAULT_CAPACITY: usize = 1024;
 
-
 type FastHasher = BuildHasherDefault<XxHash64>;
-
 
 #[derive(Clone, Debug)]
 pub struct StringInterner {
@@ -31,7 +28,10 @@ impl StringInterner {
     pub fn new() -> Self {
         Self {
             strings: Vec::with_capacity(DEFAULT_CAPACITY),
-            string_to_id: HashMap::with_capacity_and_hasher(DEFAULT_CAPACITY, FastHasher::default()),
+            string_to_id: HashMap::with_capacity_and_hasher(
+                DEFAULT_CAPACITY,
+                FastHasher::default(),
+            ),
         }
     }
 
@@ -95,10 +95,9 @@ impl StringInterner {
 
     /// Get memory usage estimate in bytes
     pub fn memory_usage(&self) -> usize {
-        let strings_size: usize = self.strings.iter()
-            .map(|s| s.len())
-            .sum();
-        let map_size = self.string_to_id.len() * (std::mem::size_of::<Arc<str>>() + std::mem::size_of::<usize>());
+        let strings_size: usize = self.strings.iter().map(|s| s.len()).sum();
+        let map_size = self.string_to_id.len()
+            * (std::mem::size_of::<Arc<str>>() + std::mem::size_of::<usize>());
         let vec_size = self.strings.capacity() * std::mem::size_of::<Arc<str>>();
         strings_size + map_size + vec_size
     }
@@ -121,10 +120,11 @@ impl StringInterner {
         while self.strings.len() <= id {
             let placeholder_id = self.strings.len();
             let placeholder: Arc<str> = format!("__placeholder_{}", placeholder_id).into();
-            self.string_to_id.insert(placeholder.clone(), placeholder_id);
+            self.string_to_id
+                .insert(placeholder.clone(), placeholder_id);
             self.strings.push(placeholder);
         }
-        
+
         // Replace the placeholder at the given ID
         let arc_str: Arc<str> = s.into();
         if let Some(old_str) = self.strings.get(id) {
@@ -135,13 +135,11 @@ impl StringInterner {
     }
 }
 
-
 impl Default for StringInterner {
     fn default() -> Self {
         Self::new()
     }
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct InternedString(pub usize);
@@ -199,11 +197,11 @@ mod tests {
     #[test]
     fn test_intern_unique_strings() {
         let mut interner = StringInterner::new();
-        
+
         let id1 = interner.intern("hello");
         let id2 = interner.intern("world");
         let id3 = interner.intern("hello"); // Should return same ID
-        
+
         assert_eq!(id1, id3);
         assert_ne!(id1, id2);
         assert_eq!(interner.len(), 2);
@@ -212,7 +210,7 @@ mod tests {
     #[test]
     fn test_get_string() {
         let mut interner = StringInterner::new();
-        
+
         let id = interner.intern("test");
         assert_eq!(interner.get(id), Some("test"));
         assert_eq!(interner.get(999), None);
@@ -221,7 +219,7 @@ mod tests {
     #[test]
     fn test_contains() {
         let mut interner = StringInterner::new();
-        
+
         interner.intern("hello");
         assert!(interner.contains("hello"));
         assert!(!interner.contains("world"));
@@ -230,7 +228,7 @@ mod tests {
     #[test]
     fn test_get_id() {
         let mut interner = StringInterner::new();
-        
+
         let id = interner.intern("test");
         assert_eq!(interner.get_id("test"), Some(id));
         assert_eq!(interner.get_id("unknown"), None);
@@ -254,7 +252,7 @@ mod tests {
         let mut interner = StringInterner::new();
         let id = interner.intern("test");
         let interned = InternedString::new(id);
-        
+
         assert_eq!(interned.id(), id);
         assert_eq!(interner.get(interned.id()), Some("test"));
     }
@@ -262,17 +260,17 @@ mod tests {
     #[test]
     fn test_many_strings() {
         let mut interner = StringInterner::new();
-        
+
         // Intern many strings
         let ids: Vec<usize> = (0..1000)
             .map(|i| interner.intern(&format!("string_{}", i)))
             .collect();
-        
+
         // All should be unique
         for (i, &id) in ids.iter().enumerate() {
             assert_eq!(interner.get(id), Some(format!("string_{}", i).as_str()));
         }
-        
+
         // Interning same strings should return same IDs
         for (i, &id) in ids.iter().enumerate() {
             let new_id = interner.intern(&format!("string_{}", i));
@@ -284,8 +282,8 @@ mod tests {
     fn test_memory_usage() {
         let mut interner = StringInterner::new();
         // Empty interner still has allocated capacity
-        assert!(interner.memory_usage() >= 0);
-        
+        assert!(interner.memory_usage() > 0);
+
         interner.intern("hello");
         assert!(interner.memory_usage() > 0);
     }
@@ -295,7 +293,7 @@ mod tests {
         let mut interner = StringInterner::new();
         interner.intern("hello");
         interner.intern("world");
-        
+
         assert_eq!(interner.len(), 2);
         interner.clear();
         assert_eq!(interner.len(), 0);
@@ -315,7 +313,7 @@ mod tests {
     fn test_intern_ref() {
         let mut interner = StringInterner::new();
         let interned = interner.intern_ref("test");
-        
+
         // First interned string gets ID 0, which is valid
         assert_eq!(interner.get(interned.id()), Some("test"));
     }

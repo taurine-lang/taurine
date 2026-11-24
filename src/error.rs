@@ -6,35 +6,17 @@ use std::fmt;
 #[derive(Debug, Clone)]
 pub enum TaurineError {
     /// Lexer error
-    Lexer {
-        message: String,
-        line: usize,
-    },
+    Lexer { message: String, line: usize },
     /// Parser error
-    Parse {
-        message: String,
-        line: usize,
-    },
+    Parse { message: String, line: usize },
     /// Runtime error
-    Runtime {
-        message: String,
-        line: usize,
-    },
+    Runtime { message: String, line: usize },
     /// Variable not found
-    UndefinedVariable {
-        name: String,
-        line: usize,
-    },
+    UndefinedVariable { name: String, line: usize },
     /// Cannot assign to const
-    ConstAssignment {
-        name: String,
-        line: usize,
-    },
+    ConstAssignment { name: String, line: usize },
     /// Type error
-    Type {
-        message: String,
-        line: usize,
-    },
+    Type { message: String, line: usize },
     /// Index out of bounds
     IndexOutOfBounds {
         index: usize,
@@ -42,15 +24,9 @@ pub enum TaurineError {
         line: usize,
     },
     /// Field not found in table
-    FieldNotFound {
-        field: String,
-        line: usize,
-    },
+    FieldNotFound { field: String, line: usize },
     /// Function call error
-    Call {
-        message: String,
-        line: usize,
-    },
+    Call { message: String, line: usize },
     /// Import error
     Import {
         path: String,
@@ -155,5 +131,11 @@ impl std::error::Error for TaurineError {}
 impl From<TaurineError> for String {
     fn from(err: TaurineError) -> Self {
         err.message()
+    }
+}
+
+impl From<String> for TaurineError {
+    fn from(message: String) -> Self {
+        TaurineError::Runtime { message, line: 0 }
     }
 }

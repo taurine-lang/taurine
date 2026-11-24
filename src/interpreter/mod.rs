@@ -2,11 +2,11 @@
 //! This module provides the core interpreter for executing Taurine code.
 //! It has been refactored into submodules for better maintainability:
 
+pub mod interner_setup;
 pub mod native_functions;
+
 pub mod execute;
 
-// Re-export from execute module
-pub use execute::Interpreter;
+pub use execute::{ControlFlow, Interpreter, StackFrame};
 
-// Re-export types that were in the original file
-pub use execute::StackFrame;
+pub use interner_setup::create_default_interner;

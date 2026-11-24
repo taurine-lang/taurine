@@ -20,14 +20,14 @@ impl Formatter {
     pub fn format(&mut self, program: &Program) -> String {
         self.output.clear();
         self.indent = 0;
-        
+
         for (i, stmt) in program.statements.iter().enumerate() {
             if i > 0 {
                 self.output.push('\n');
             }
             self.format_stmt(stmt);
         }
-        
+
         self.output.push('\n');
         self.output.clone()
     }
@@ -35,7 +35,6 @@ impl Formatter {
     fn indent_str(&self) -> String {
         "    ".repeat(self.indent)
     }
-
 
     fn writeln(&mut self, s: &str) {
         self.output.push_str(&self.indent_str());
@@ -45,21 +44,36 @@ impl Formatter {
 
     fn format_stmt(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::Declaration { name, initializer, line: _, is_const } => {
+            Stmt::Declaration {
+                name,
+                initializer,
+                line: _,
+                is_const,
+            } => {
                 let keyword = if *is_const { "const" } else { "let" };
                 if let Some(init) = initializer {
-                    self.writeln(&format!("{} {} = {};", keyword, name, self.expr_to_string(init)));
+                    self.writeln(&format!(
+                        "{} {} = {};",
+                        keyword,
+                        name,
+                        self.expr_to_string(init)
+                    ));
                 } else {
                     self.writeln(&format!("{} {};", keyword, name));
                 }
             }
-            Stmt::Assignment { name, value, line: _, .. } => {
+            Stmt::Assignment { name, value, .. } => {
                 self.writeln(&format!("{} = {};", name, self.expr_to_string(value)));
             }
             Stmt::Expression(expr) => {
                 self.writeln(&format!("{};", self.expr_to_string(expr)));
             }
-            Stmt::If { condition, then_branch, else_branch, line: _ } => {
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+                line: _,
+            } => {
                 self.writeln(&format!("if {} {{", self.expr_to_string(condition)));
                 self.indent += 1;
                 for stmt in then_branch {
@@ -76,7 +90,11 @@ impl Formatter {
                 }
                 self.writeln("}");
             }
-            Stmt::While { condition, body, line: _ } => {
+            Stmt::While {
+                condition,
+                body,
+                line: _,
+            } => {
                 self.writeln(&format!("while {} {{", self.expr_to_string(condition)));
                 self.indent += 1;
                 for stmt in body {
@@ -85,10 +103,22 @@ impl Formatter {
                 self.indent -= 1;
                 self.writeln("}");
             }
-            Stmt::For { initializer, condition, increment, body, line: _ } => {
-                let init_str = initializer.as_ref().map(|i| self.expr_to_string(i)).unwrap_or_default();
+            Stmt::For {
+                initializer,
+                condition,
+                increment,
+                body,
+                line: _,
+            } => {
+                let init_str = initializer
+                    .as_ref()
+                    .map(|i| self.expr_to_string(i))
+                    .unwrap_or_default();
                 let cond_str = self.expr_to_string(condition);
-                let inc_str = increment.as_ref().map(|i| self.expr_to_string(i)).unwrap_or_default();
+                let inc_str = increment
+                    .as_ref()
+                    .map(|i| self.expr_to_string(i))
+                    .unwrap_or_default();
                 self.writeln(&format!("for ({init_str}; {cond_str}; {inc_str}) {{"));
                 self.indent += 1;
                 for stmt in body {
@@ -97,8 +127,17 @@ impl Formatter {
                 self.indent -= 1;
                 self.writeln("}");
             }
-            Stmt::ForIn { variable, iterable, body, line: _ } => {
-                self.writeln(&format!("for {} in {} {{", variable, self.expr_to_string(iterable)));
+            Stmt::ForIn {
+                variable,
+                iterable,
+                body,
+                line: _,
+            } => {
+                self.writeln(&format!(
+                    "for {} in {} {{",
+                    variable,
+                    self.expr_to_string(iterable)
+                ));
                 self.indent += 1;
                 for stmt in body {
                     self.format_stmt(stmt);
@@ -106,8 +145,14 @@ impl Formatter {
                 self.indent -= 1;
                 self.writeln("}");
             }
-            Stmt::Function { name, params, body, line: _ } => {
-                let params_str = params.iter()
+            Stmt::Function {
+                name,
+                params,
+                body,
+                line: _,
+            } => {
+                let params_str = params
+                    .iter()
                     .map(|(p, d): &(InternedString, Option<Expr>)| {
                         if let Some(default) = d {
                             format!("{} = {}", p, self.expr_to_string(default))
@@ -133,7 +178,8 @@ impl Formatter {
                 }
             }
             Stmt::ReturnMulti(values) => {
-                let values_str = values.iter()
+                let values_str = values
+                    .iter()
                     .map(|v| self.expr_to_string(v))
                     .collect::<Vec<_>>()
                     .join(", ");
@@ -148,14 +194,23 @@ impl Formatter {
                 self.indent -= 1;
                 self.writeln("}");
             }
-            Stmt::Import { path, alias, line: _ } => {
+            Stmt::Import {
+                path,
+                alias,
+                line: _,
+            } => {
                 if let Some(a) = alias {
                     self.writeln(&format!("import \"{}\" as {};", path, a));
                 } else {
                     self.writeln(&format!("import \"{}\";", path));
                 }
             }
-            Stmt::Try { body, catch_var, catch_body, line: _ } => {
+            Stmt::Try {
+                body,
+                catch_var,
+                catch_body,
+                line: _,
+            } => {
                 self.writeln("try {");
                 self.indent += 1;
                 for stmt in body {
@@ -176,12 +231,29 @@ impl Formatter {
             }
             Stmt::Break => self.writeln("break;"),
             Stmt::Continue => self.writeln("continue;"),
-            Stmt::Destructure { names, initializer, line: _ } => {
-                let names_str = names.iter().map(|n: &InternedString| n.to_string()).collect::<Vec<_>>().join(", ");
-                self.writeln(&format!("let {{{names_str}}} = {};", self.expr_to_string(initializer)));
+            Stmt::Destructure {
+                names,
+                initializer,
+                line: _,
+            } => {
+                let names_str = names
+                    .iter()
+                    .map(|n: &InternedString| n.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                self.writeln(&format!(
+                    "let {{{names_str}}} = {};",
+                    self.expr_to_string(initializer)
+                ));
             }
-            Stmt::AsyncFunction { name, params, body, line: _ } => {
-                let params_str = params.iter()
+            Stmt::AsyncFunction {
+                name,
+                params,
+                body,
+                line: _,
+            } => {
+                let params_str = params
+                    .iter()
                     .map(|(p, d)| {
                         if let Some(default) = d {
                             format!("{} = {}", p, self.expr_to_string(default))
@@ -199,8 +271,14 @@ impl Formatter {
                 self.indent -= 1;
                 self.writeln("}");
             }
-            Stmt::Generator { name, params, body, line: _ } => {
-                let params_str = params.iter()
+            Stmt::Generator {
+                name,
+                params,
+                body,
+                line: _,
+            } => {
+                let params_str = params
+                    .iter()
                     .map(|(p, d)| {
                         if let Some(default) = d {
                             format!("{} = {}", p, self.expr_to_string(default))
@@ -218,6 +296,29 @@ impl Formatter {
                 self.indent -= 1;
                 self.writeln("}");
             }
+            Stmt::Throw { value, line: _ } => {
+                self.writeln(&format!("throw {};", self.expr_to_string(value)));
+            }
+            Stmt::Set {
+                object,
+                name,
+                value,
+                line: _,
+            } => {
+                self.writeln(&format!(
+                    "{}.{} = {};",
+                    self.expr_to_string(object),
+                    name,
+                    self.expr_to_string(value)
+                ));
+            }
+            Stmt::NullCoalesceAssign {
+                name,
+                value,
+                line: _,
+            } => {
+                self.writeln(&format!("{} ??= {};", name, self.expr_to_string(value)));
+            }
             _ => {}
         }
     }
@@ -230,7 +331,12 @@ impl Formatter {
             Expr::LiteralTrue => "true".to_string(),
             Expr::LiteralFalse => "false".to_string(),
             Expr::LiteralNil => "nil".to_string(),
-            Expr::Binary { left, op, right, line: _ } => {
+            Expr::Binary {
+                left,
+                op,
+                right,
+                line: _,
+            } => {
                 let op_str = match op {
                     TokenKind::Plus => "+",
                     TokenKind::Minus => "-",
@@ -246,7 +352,11 @@ impl Formatter {
                     TokenKind::Or => "or",
                     _ => "?",
                 };
-                format!("{} {op_str} {}", self.expr_to_string(left), self.expr_to_string(right))
+                format!(
+                    "{} {op_str} {}",
+                    self.expr_to_string(left),
+                    self.expr_to_string(right)
+                )
             }
             Expr::Unary { op, expr, line: _ } => {
                 let op_str = match op {
@@ -256,44 +366,85 @@ impl Formatter {
                 };
                 format!("{op_str}{}", self.expr_to_string(expr))
             }
-            Expr::Call { callee, arguments, line: _ } => {
-                let args = arguments.iter()
+            Expr::Call {
+                callee,
+                arguments,
+                line: _,
+            } => {
+                let args = arguments
+                    .iter()
                     .map(|a| self.expr_to_string(a))
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("{}({args})", self.expr_to_string(callee))
             }
             Expr::Table { entries, line: _ } => {
-                let items = entries.iter()
+                let items = entries
+                    .iter()
                     .map(|(k, v)| format!("{k}: {}", self.expr_to_string(v)))
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("{{ {items} }}")
             }
             Expr::Array { items, line: _ } => {
-                let items_str = items.iter()
+                let items_str = items
+                    .iter()
                     .map(|i| self.expr_to_string(i))
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("[{items_str}]")
             }
-            Expr::Index { object, index, line: _ } => {
-                format!("{}[{}]", self.expr_to_string(object), self.expr_to_string(index))
+            Expr::Index {
+                object,
+                index,
+                line: _,
+            } => {
+                format!(
+                    "{}[{}]",
+                    self.expr_to_string(object),
+                    self.expr_to_string(index)
+                )
             }
             Expr::Length { expr, line: _ } => {
                 format!("#{}", self.expr_to_string(expr))
             }
-            Expr::Get { object, name, line: _ } => {
+            Expr::Get {
+                object,
+                name,
+                line: _,
+            } => {
                 format!("{}.{}", self.expr_to_string(object), name)
             }
-            Expr::SafeGet { object, name, line: _ } => {
+            Expr::SafeGet {
+                object,
+                name,
+                line: _,
+            } => {
                 format!("{}?.{}", self.expr_to_string(object), name)
             }
-            Expr::SetIndex { object, index, value, line: _ } => {
-                format!("{}[{}] = {}", self.expr_to_string(object), self.expr_to_string(index), self.expr_to_string(value))
+            Expr::SetIndex {
+                object,
+                index,
+                value,
+                line: _,
+            } => {
+                format!(
+                    "{}[{}] = {}",
+                    self.expr_to_string(object),
+                    self.expr_to_string(index),
+                    self.expr_to_string(value)
+                )
             }
-            Expr::Range { start, end, line: _ } => {
-                format!("{}..{}", self.expr_to_string(start), self.expr_to_string(end))
+            Expr::Range {
+                start,
+                end,
+                line: _,
+            } => {
+                format!(
+                    "{}..{}",
+                    self.expr_to_string(start),
+                    self.expr_to_string(end)
+                )
             }
             Expr::FString { parts, line: _ } => {
                 let mut result = String::from("f\"");
@@ -308,8 +459,13 @@ impl Formatter {
                 result.push('"');
                 result
             }
-            Expr::FunctionLiteral { params, body: _, line: _ } => {
-                let params_str = params.iter()
+            Expr::FunctionLiteral {
+                params,
+                body: _,
+                line: _,
+            } => {
+                let params_str = params
+                    .iter()
                     .map(|(p, _): &(InternedString, Option<Expr>)| p.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
@@ -319,9 +475,7 @@ impl Formatter {
                 let inner: Vec<String> = items.iter().map(|i| format!("{:?}", i)).collect();
                 format!("{{{}}}", inner.join(", "))
             }
-            Expr::This { line: _ } => {
-                "this".to_string()
-            }
+            Expr::This { line: _ } => "this".to_string(),
             Expr::Super { method, line: _ } => {
                 format!("super.{}", method.id())
             }
@@ -338,21 +492,127 @@ impl Formatter {
                     "yield".to_string()
                 }
             }
-            Expr::AsyncFunctionLiteral { params, body: _, line: _ } => {
-                let params_str = params.iter()
+            Expr::AsyncFunctionLiteral {
+                params,
+                body: _,
+                line: _,
+            } => {
+                let params_str = params
+                    .iter()
                     .map(|(p, _)| p.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("async function({params_str}) {{ ... }}")
             }
-            Expr::GeneratorLiteral { params, body: _, line: _ } => {
-                let params_str = params.iter()
+            Expr::GeneratorLiteral {
+                params,
+                body: _,
+                line: _,
+            } => {
+                let params_str = params
+                    .iter()
                     .map(|(p, _)| p.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("generator({params_str}) {{ ... }}")
             }
+            Expr::NullCoalesce {
+                left,
+                right,
+                line: _,
+            } => {
+                format!(
+                    "{} ?? {}",
+                    self.expr_to_string(left),
+                    self.expr_to_string(right)
+                )
+            }
+            Expr::Match {
+                value,
+                arms,
+                line: _,
+            } => {
+                let arms_str = arms
+                    .iter()
+                    .map(|arm| {
+                        let pattern_str = self.pattern_to_string(&arm.pattern);
+                        let guard_str = arm
+                            .guard
+                            .as_ref()
+                            .map(|g| format!(" if {}", self.expr_to_string(g)))
+                            .unwrap_or_default();
+                        format!(
+                            "{}{} => {}",
+                            pattern_str,
+                            guard_str,
+                            self.expr_to_string(&arm.body)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("match {} {{ {} }}", self.expr_to_string(value), arms_str)
+            }
+            Expr::Require { path, line: _ } => {
+                format!("require(\"{}\")", path)
+            }
+            Expr::Export {
+                name,
+                value,
+                line: _,
+            } => {
+                format!("export {} = {}", name, self.expr_to_string(value))
+            }
+            Expr::Class {
+                name,
+                superclass,
+                methods: _,
+                line: _,
+            } => {
+                let super_str = superclass
+                    .map(|s| format!(" extends {}", s))
+                    .unwrap_or_default();
+                format!("class {}{} {{ ... }}", name, super_str)
+            }
+            Expr::NewInstance {
+                class_name,
+                arguments,
+                line: _,
+            } => {
+                let args = arguments
+                    .iter()
+                    .map(|a| self.expr_to_string(a))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("new {}({})", class_name, args)
+            }
+            Expr::Spread { expr, line: _ } => {
+                format!("...{}", self.expr_to_string(expr))
+            }
             _ => String::from("<expr>"),
+        }
+    }
+    fn pattern_to_string(&self, pattern: &crate::ast::Pattern) -> String {
+        use crate::ast::Pattern;
+        match pattern {
+            Pattern::Wildcard => "_".to_string(),
+            Pattern::Identifier(name) => name.to_string(),
+            Pattern::Literal(expr) => self.expr_to_string(expr),
+            Pattern::Array(patterns) => {
+                let inner = patterns
+                    .iter()
+                    .map(|p| self.pattern_to_string(p))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("[{}]", inner)
+            }
+            Pattern::Table(entries) => {
+                let inner = entries
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, self.pattern_to_string(v)))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{{{}}}", inner)
+            }
         }
     }
 }

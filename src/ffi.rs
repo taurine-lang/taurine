@@ -1,13 +1,13 @@
 //! FFI (Foreign Function Interface) for Taurine
-//! 
+//!
 //! This module provides a C API for embedding Taurine in other languages.
-//! 
+//!
 //! # Example (C)
-//! 
+//!
 //! ```c
 //! #include <stdio.h>
 //! #include "taurine.h"
-//! 
+//!
 //! int main() {
 //!     TaurineVM* vm = taurine_new();
 //!     taurine_run(vm, "print(\"Hello from C!\")");
@@ -15,6 +15,7 @@
 //!     return 0;
 //! }
 //! ```
+#![allow(clippy::not_unsafe_ptr_arg_deref)] // TODO(ffi-phase): unsafe extern + catch_unwind
 
 use crate::interpreter::Interpreter;
 use crate::value::Value;
@@ -52,14 +53,14 @@ pub extern "C" fn taurine_new_with_path(path: *const c_char) -> *mut TaurineVM {
     if path.is_null() {
         return taurine_new();
     }
-    
+
     let path_str = unsafe {
         match CStr::from_ptr(path).to_str() {
             Ok(s) => PathBuf::from(s),
             Err(_) => return std::ptr::null_mut(),
         }
     };
-    
+
     let vm = TaurineVM {
         interpreter: Interpreter::new(path_str),
         last_error: None,
@@ -141,7 +142,7 @@ pub extern "C" fn taurine_get_error(vm: *mut TaurineVM) -> *const c_char {
     if vm.is_null() {
         return std::ptr::null();
     }
-    
+
     let vm = unsafe { &mut *vm };
     match &vm.last_error {
         Some(e) => match CString::new(e.as_str()) {
@@ -168,14 +169,14 @@ pub extern "C" fn taurine_new_string(s: *const c_char) -> *mut TaurineValue {
     if s.is_null() {
         return std::ptr::null_mut();
     }
-    
+
     let str_val = unsafe {
         match CStr::from_ptr(s).to_str() {
             Ok(str) => str.to_string(),
             Err(_) => return std::ptr::null_mut(),
         }
     };
-    
+
     Box::into_raw(Box::new(TaurineValue {
         value: Value::String(str_val),
     }))
@@ -192,9 +193,7 @@ pub extern "C" fn taurine_new_bool(b: c_int) -> *mut TaurineValue {
 /// Create a new nil value
 #[no_mangle]
 pub extern "C" fn taurine_new_nil() -> *mut TaurineValue {
-    Box::into_raw(Box::new(TaurineValue {
-        value: Value::Nil,
-    }))
+    Box::into_raw(Box::new(TaurineValue { value: Value::Nil }))
 }
 
 /// Free a TaurineValue
@@ -290,7 +289,7 @@ pub extern "C" fn taurine_as_string(val: *const TaurineValue) -> *const c_char {
     if val.is_null() {
         return std::ptr::null();
     }
-    
+
     let val = unsafe { &*val };
     match &val.value {
         Value::String(s) => match CString::new(s.as_str()) {
@@ -360,9 +359,12 @@ pub extern "C" fn taurine_set(
     };
 
     let taurine_val = unsafe { &*value };
-    
+
     // Use the public set method for FFI string-based access
-    vm.interpreter.set(name_str, taurine_val.value.clone()).map(|_| 0).unwrap_or(-1)
+    vm.interpreter
+        .set(name_str, taurine_val.value.clone())
+        .map(|_| 0)
+        .unwrap_or(-1)
 }
 
 // Function Calls
@@ -392,7 +394,7 @@ pub extern "C" fn taurine_call(
 
     // Get the function from the VM using the public API
     let func_result = vm.interpreter.get(name_str);
-    
+
     match func_result {
         Ok(func_value) => {
             // Convert args from C array to Vec<Value>
@@ -423,7 +425,8 @@ pub extern "C" fn taurine_call(
                 Value::Function { .. } => {
                     // For Taurine functions, we need to execute them
                     // This is a simplified implementation
-                    vm.last_error = Some("Calling Taurine functions from FFI requires bytecode VM".to_string());
+                    vm.last_error =
+                        Some("Calling Taurine functions from FFI requires bytecode VM".to_string());
                     std::ptr::null_mut()
                 }
                 _ => {

@@ -37,7 +37,7 @@ where
     F: FnMut(),
 {
     let mut times = Vec::with_capacity(iterations);
-    
+
     for _ in 0..iterations {
         let start = Instant::now();
         f();
@@ -74,10 +74,12 @@ pub fn bench_variable_allocation(iterations: usize) -> BenchmarkResult {
 pub fn bench_function_calls(iterations: usize) -> BenchmarkResult {
     benchmark("Function Calls", iterations, || {
         let mut interp = crate::interpreter::Interpreter::new(std::path::PathBuf::from("."));
-        let _ = interp.run(r#"
+        let _ = interp.run(
+            r#"
             function add(a, b) { return a + b }
             add(10, 20)
-        "#);
+        "#,
+        );
     })
 }
 
@@ -85,10 +87,12 @@ pub fn bench_function_calls(iterations: usize) -> BenchmarkResult {
 pub fn bench_loop_performance(iterations: usize) -> BenchmarkResult {
     benchmark("Loop Performance (1000 iter)", iterations, || {
         let mut interp = crate::interpreter::Interpreter::new(std::path::PathBuf::from("."));
-        let _ = interp.run(r#"
+        let _ = interp.run(
+            r#"
             let sum = 0
             for i in 1..1001 { sum = sum + i }
-        "#);
+        "#,
+        );
     })
 }
 
@@ -96,11 +100,13 @@ pub fn bench_loop_performance(iterations: usize) -> BenchmarkResult {
 pub fn bench_array_operations(iterations: usize) -> BenchmarkResult {
     benchmark("Array Operations", iterations, || {
         let mut interp = crate::interpreter::Interpreter::new(std::path::PathBuf::from("."));
-        let _ = interp.run(r#"
+        let _ = interp.run(
+            r#"
             let arr = [1, 2, 3, 4, 5]
             io_arraypush(arr, 6)
             io_arraylen(arr)
-        "#);
+        "#,
+        );
     })
 }
 
@@ -108,10 +114,12 @@ pub fn bench_array_operations(iterations: usize) -> BenchmarkResult {
 pub fn bench_table_operations(iterations: usize) -> BenchmarkResult {
     benchmark("Table Operations", iterations, || {
         let mut interp = crate::interpreter::Interpreter::new(std::path::PathBuf::from("."));
-        let _ = interp.run(r#"
+        let _ = interp.run(
+            r#"
             let obj = { name: "test", value: 42 }
             obj.name
-        "#);
+        "#,
+        );
     })
 }
 
@@ -119,12 +127,14 @@ pub fn bench_table_operations(iterations: usize) -> BenchmarkResult {
 pub fn bench_string_operations(iterations: usize) -> BenchmarkResult {
     benchmark("String Operations", iterations, || {
         let mut interp = crate::interpreter::Interpreter::new(std::path::PathBuf::from("."));
-        let _ = interp.run(r#"
+        let _ = interp.run(
+            r#"
             let s = "Hello, World!"
             io_strupper(s)
             io_strlower(s)
             io_strtrim(s)
-        "#);
+        "#,
+        );
     })
 }
 
@@ -132,7 +142,8 @@ pub fn bench_string_operations(iterations: usize) -> BenchmarkResult {
 pub fn bench_math_operations(iterations: usize) -> BenchmarkResult {
     benchmark("Math Operations", iterations, || {
         let mut interp = crate::interpreter::Interpreter::new(std::path::PathBuf::from("."));
-        let _ = interp.run(r#"
+        let _ = interp.run(
+            r#"
             let a = 100
             let b = 23
             a + b
@@ -140,7 +151,8 @@ pub fn bench_math_operations(iterations: usize) -> BenchmarkResult {
             a * b
             a / b
             a % b
-        "#);
+        "#,
+        );
     })
 }
 
@@ -148,10 +160,12 @@ pub fn bench_math_operations(iterations: usize) -> BenchmarkResult {
 pub fn bench_closure_creation(iterations: usize) -> BenchmarkResult {
     benchmark("Closure Creation", iterations, || {
         let mut interp = crate::interpreter::Interpreter::new(std::path::PathBuf::from("."));
-        let _ = interp.run(r#"
+        let _ = interp.run(
+            r#"
             let make_adder = fn(x) { fn(y) { x + y } }
             let add5 = make_adder(5)
-        "#);
+        "#,
+        );
     })
 }
 
@@ -164,7 +178,7 @@ pub fn bench_gc_allocation(iterations: usize) -> BenchmarkResult {
             .strategy(crate::gc::GcStrategy::ReferenceCounting)
             .build();
         let mut gc = crate::gc::GarbageCollector::new(config);
-        
+
         for _ in 0..100 {
             gc.allocate(64);
         }
@@ -178,14 +192,14 @@ pub fn bench_gc_mark_sweep(iterations: usize) -> BenchmarkResult {
             .strategy(crate::gc::GcStrategy::MarkAndSweep)
             .build();
         let mut gc = crate::gc::GarbageCollector::new(config);
-        
+
         let root = gc.allocate(100);
         gc.add_root(root);
-        
+
         for _ in 0..50 {
             gc.allocate(50);
         }
-        
+
         gc.collect();
     })
 }
@@ -194,11 +208,11 @@ pub fn bench_gc_mark_sweep(iterations: usize) -> BenchmarkResult {
 pub fn bench_gc_generational(iterations: usize) -> BenchmarkResult {
     benchmark("GC Generational", iterations, || {
         let mut gc = crate::gc::GarbageCollector::for_server();
-        
+
         for _ in 0..100 {
             gc.allocate(1000);
         }
-        
+
         gc.collect();
     })
 }
@@ -207,11 +221,11 @@ pub fn bench_gc_generational(iterations: usize) -> BenchmarkResult {
 pub fn bench_gc_arena(iterations: usize) -> BenchmarkResult {
     benchmark("GC Arena", iterations, || {
         let mut gc = crate::gc::GarbageCollector::for_cli();
-        
+
         for _ in 0..100 {
             gc.allocate(100);
         }
-        
+
         gc.reset_arena();
     })
 }
@@ -224,13 +238,13 @@ pub fn bench_gc_cycle_detection(iterations: usize) -> BenchmarkResult {
             .enable_cycle_detection(true)
             .build();
         let mut gc = crate::gc::GarbageCollector::new(config);
-        
+
         let a = gc.allocate(50);
         let b = gc.allocate(50);
-        
+
         gc.add_child(a, b);
         gc.add_child(b, a);
-        
+
         gc.collect_full();
     })
 }
@@ -284,7 +298,7 @@ mod tests {
         let result = benchmark("Test", 10, || {
             let _ = 1 + 1;
         });
-        
+
         assert_eq!(result.iterations, 10);
         assert!(result.total_time_ms > 0.0);
         assert!(result.avg_time_ms > 0.0);

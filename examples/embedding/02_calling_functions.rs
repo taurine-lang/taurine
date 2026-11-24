@@ -3,8 +3,8 @@
 //
 // Run with: cargo run --example 02_getting_values
 
-use taurine::{Interpreter, Value};
 use std::path::PathBuf;
+use taurine::{Interpreter, Value};
 
 fn main() -> Result<(), String> {
     println!("Getting Values from Taurine\n");
@@ -12,11 +12,13 @@ fn main() -> Result<(), String> {
     let mut interp = Interpreter::new(PathBuf::from("."));
 
     // Define variables in Taurine
-    interp.run(r#"
+    interp.run(
+        r#"
         let x = 42
         let name = "Taurine"
         let arr = [1, 2, 3, 4, 5]
-    "#)?;
+    "#,
+    )?;
 
     // Get values from Taurine
     println!("Getting values from Taurine...\n");

@@ -1,10 +1,13 @@
 //! Value types
-use std::fmt;
-use std::rc::Rc;
-use std::cell::RefCell;
+use crate::environment::Environment;
 use indexmap::IndexMap;
 use smallvec::SmallVec;
-use crate::environment::Environment;
+use std::cell::RefCell;
+use std::fmt;
+use std::rc::Rc;
+
+pub type NativeFn =
+    Rc<dyn Fn(&[Value], &mut crate::string_intern::StringInterner) -> Result<Value, String>>;
 
 #[derive(Clone)]
 pub enum Value {
@@ -39,7 +42,7 @@ pub enum Value {
         closure: Rc<RefCell<Environment>>,
         state: Rc<RefCell<GeneratorState>>,
     },
-    NativeFunction(Rc<dyn Fn(&[Value], &mut crate::string_intern::StringInterner) -> Result<Value, String>>),
+    NativeFunction(NativeFn),
     Future(Rc<RefCell<FutureState>>),
     Error(String),
 }
@@ -129,7 +132,9 @@ impl PartialEq for Value {
             }
             (Value::Future(_), Value::Future(_)) => false,
             (Value::Generator { .. }, Value::Generator { .. }) => false,
-            (Value::AsyncFunction { name: n1, .. }, Value::AsyncFunction { name: n2, .. }) => n1 == n2,
+            (Value::AsyncFunction { name: n1, .. }, Value::AsyncFunction { name: n2, .. }) => {
+                n1 == n2
+            }
             _ => false,
         }
     }
@@ -147,7 +152,8 @@ impl fmt::Display for Value {
                 if table.is_empty() {
                     write!(f, "{{}}")
                 } else {
-                    let items: Vec<String> = table.iter().map(|(k, v)| format!("{k}: {v}")).collect();
+                    let items: Vec<String> =
+                        table.iter().map(|(k, v)| format!("{k}: {v}")).collect();
                     write!(f, "{{{}}}", items.join(", "))
                 }
             }

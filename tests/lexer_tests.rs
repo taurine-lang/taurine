@@ -68,7 +68,10 @@ fn test_identifiers() {
 #[test]
 fn test_comments() {
     let tokens = tokenize("let x = 10 // comment\nlet y = 20");
-    assert_eq!(tokens.iter().filter(|t| t.kind == TokenKind::Let).count(), 2);
+    assert_eq!(
+        tokens.iter().filter(|t| t.kind == TokenKind::Let).count(),
+        2
+    );
 }
 
 #[test]

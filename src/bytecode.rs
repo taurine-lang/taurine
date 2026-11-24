@@ -1,12 +1,12 @@
 //! Bytecode Compiler and Virtual Machine
-use crate::ast::{Expr, Stmt, Program};
-use crate::lexer::TokenKind;
-use crate::value::Value;
+use crate::ast::{Expr, Program, Stmt};
 use crate::environment::Environment;
-use crate::string_intern::{StringInterner, InternedString};
-use std::rc::Rc;
-use std::cell::RefCell;
+use crate::lexer::TokenKind;
+use crate::string_intern::{InternedString, StringInterner};
+use crate::value::Value;
 use indexmap::IndexMap;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
@@ -71,14 +71,24 @@ pub enum OpCode {
 
 #[derive(Clone, Debug)]
 pub enum Instruction {
-    LoadConstant { index: usize },
+    LoadConstant {
+        index: usize,
+    },
     LoadNil,
     LoadTrue,
     LoadFalse,
-    LoadLocal { slot: usize },
-    StoreLocal { slot: usize },
-    LoadGlobal { name: InternedString },
-    StoreGlobal { name: InternedString },
+    LoadLocal {
+        slot: usize,
+    },
+    StoreLocal {
+        slot: usize,
+    },
+    LoadGlobal {
+        name: InternedString,
+    },
+    StoreGlobal {
+        name: InternedString,
+    },
     Add,
     Subtract,
     Multiply,
@@ -94,38 +104,78 @@ pub enum Instruction {
     And,
     Or,
     Not,
-    Jump { offset: usize },
-    JumpIfFalse { offset: usize },
-    JumpIfTrue { offset: usize },
-    JumpBack { offset: usize },
-    Call { arg_count: usize },
+    Jump {
+        offset: usize,
+    },
+    JumpIfFalse {
+        offset: usize,
+    },
+    JumpIfTrue {
+        offset: usize,
+    },
+    JumpBack {
+        offset: usize,
+    },
+    Call {
+        arg_count: usize,
+    },
     Return,
     ReturnNil,
-    NewArray { capacity: usize },
+    NewArray {
+        capacity: usize,
+    },
     NewTable,
     ArrayPush,
-    TableSet { key: InternedString },
+    TableSet {
+        key: InternedString,
+    },
     IndexGet,
     IndexSet,
-    PropertyGet { name: InternedString },
-    PropertySet { name: InternedString },
+    PropertyGet {
+        name: InternedString,
+    },
+    PropertySet {
+        name: InternedString,
+    },
     Break,
     Continue,
-    Line { line_num: usize },
+    Line {
+        line_num: usize,
+    },
     NullCoalesce,
-    Lambda { param_count: usize, func_index: usize },
-    NewInstance { class_name: InternedString, arg_count: usize },
+    Lambda {
+        param_count: usize,
+        func_index: usize,
+    },
+    NewInstance {
+        class_name: InternedString,
+        arg_count: usize,
+    },
     This,
-    Super { method: InternedString },
+    Super {
+        method: InternedString,
+    },
     Spread,
-    Match { arm_count: usize },
-    Require { path: InternedString },
-    Export { name: InternedString },
+    Match {
+        arm_count: usize,
+    },
+    Require {
+        path: InternedString,
+    },
+    Export {
+        name: InternedString,
+    },
     Set,
-    Class { name: InternedString, method_count: usize },
+    Class {
+        name: InternedString,
+        method_count: usize,
+    },
     NewRange,
     ForInInit,
-    ForInNext { var_slot: usize, end_offset: usize },
+    ForInNext {
+        var_slot: usize,
+        end_offset: usize,
+    },
     Length,
 }
 
@@ -181,7 +231,12 @@ impl Compiler {
         }
     }
 
-    fn compile_function(&mut self, name: usize, params: Vec<usize>, statements: Vec<Stmt>) -> BytecodeFunction {
+    fn compile_function(
+        &mut self,
+        name: usize,
+        params: Vec<usize>,
+        statements: Vec<Stmt>,
+    ) -> BytecodeFunction {
         let old_locals = self.locals.clone();
         let old_slot_count = self.slot_count;
         let old_max_slots = self.max_slots;
@@ -233,7 +288,7 @@ impl Compiler {
         slot
     }
 
-    fn patch_breaks(&mut self, instructions: &mut Vec<Instruction>, target: usize) {
+    fn patch_breaks(&mut self, instructions: &mut [Instruction], target: usize) {
         if let Some(patches) = self.break_patches.pop() {
             for idx in patches {
                 if let Instruction::Jump { offset } = &mut instructions[idx] {
@@ -243,7 +298,7 @@ impl Compiler {
         }
     }
 
-    fn patch_continues(&mut self, instructions: &mut Vec<Instruction>, target: usize) {
+    fn patch_continues(&mut self, instructions: &mut [Instruction], target: usize) {
         if let Some(patches) = self.continue_patches.pop() {
             for idx in patches {
                 if let Instruction::Jump { offset } = &mut instructions[idx] {
@@ -255,7 +310,12 @@ impl Compiler {
 
     fn compile_stmt(&mut self, instructions: &mut Vec<Instruction>, stmt: Stmt) {
         match stmt {
-            Stmt::Declaration { name, initializer, line, is_const: _ } => {
+            Stmt::Declaration {
+                name,
+                initializer,
+                line,
+                is_const: _,
+            } => {
                 if let Some(init) = initializer {
                     self.compile_expr(instructions, init);
                 } else {
@@ -266,7 +326,9 @@ impl Compiler {
                 instructions.push(Instruction::StoreLocal { slot });
                 instructions.push(Instruction::Line { line_num: line });
             }
-            Stmt::Assignment { name, value, line, .. } => {
+            Stmt::Assignment {
+                name, value, line, ..
+            } => {
                 self.compile_expr(instructions, value);
                 if let Some(&slot) = self.locals.get(&name.id()) {
                     instructions.push(Instruction::StoreLocal { slot });
@@ -279,7 +341,12 @@ impl Compiler {
                 self.compile_expr(instructions, expr);
                 instructions.push(Instruction::ReturnNil);
             }
-            Stmt::If { condition, then_branch, else_branch, line } => {
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+                line,
+            } => {
                 self.compile_expr(instructions, condition);
                 let else_jump = instructions.len();
                 instructions.push(Instruction::JumpIfFalse { offset: 0 });
@@ -308,7 +375,11 @@ impl Compiler {
                 }
                 instructions.push(Instruction::Line { line_num: line });
             }
-            Stmt::While { condition, body, line } => {
+            Stmt::While {
+                condition,
+                body,
+                line,
+            } => {
                 self.break_patches.push(Vec::new());
                 self.continue_patches.push(Vec::new());
 
@@ -320,7 +391,9 @@ impl Compiler {
                 for stmt in &body {
                     self.compile_stmt(instructions, stmt.clone());
                 }
-                instructions.push(Instruction::JumpBack { offset: instructions.len() - loop_start + 1 });
+                instructions.push(Instruction::JumpBack {
+                    offset: instructions.len() - loop_start + 1,
+                });
 
                 let loop_end = instructions.len();
                 if let Instruction::JumpIfFalse { offset } = &mut instructions[exit_jump] {
@@ -331,7 +404,13 @@ impl Compiler {
                 self.patch_continues(instructions, loop_start);
                 instructions.push(Instruction::Line { line_num: line });
             }
-            Stmt::For { initializer, condition, increment, body, line } => {
+            Stmt::For {
+                initializer,
+                condition,
+                increment,
+                body,
+                line,
+            } => {
                 self.break_patches.push(Vec::new());
                 self.continue_patches.push(Vec::new());
 
@@ -356,7 +435,9 @@ impl Compiler {
                     instructions.push(Instruction::ReturnNil);
                 }
 
-                instructions.push(Instruction::JumpBack { offset: instructions.len() - loop_start + 1 });
+                instructions.push(Instruction::JumpBack {
+                    offset: instructions.len() - loop_start + 1,
+                });
 
                 let loop_end = instructions.len();
                 if let Instruction::JumpIfFalse { offset } = &mut instructions[exit_jump] {
@@ -367,7 +448,12 @@ impl Compiler {
                 self.patch_continues(instructions, continue_target);
                 instructions.push(Instruction::Line { line_num: line });
             }
-            Stmt::ForIn { variable, iterable, body, line } => {
+            Stmt::ForIn {
+                variable,
+                iterable,
+                body,
+                line,
+            } => {
                 self.break_patches.push(Vec::new());
                 self.continue_patches.push(Vec::new());
 
@@ -379,15 +465,21 @@ impl Compiler {
 
                 let loop_start = instructions.len();
                 let forin_next_idx = instructions.len();
-                instructions.push(Instruction::ForInNext { var_slot, end_offset: 0 });
+                instructions.push(Instruction::ForInNext {
+                    var_slot,
+                    end_offset: 0,
+                });
 
                 for stmt in &body {
                     self.compile_stmt(instructions, stmt.clone());
                 }
-                instructions.push(Instruction::JumpBack { offset: instructions.len() - loop_start + 1 });
+                instructions.push(Instruction::JumpBack {
+                    offset: instructions.len() - loop_start + 1,
+                });
 
                 let loop_end = instructions.len();
-                if let Instruction::ForInNext { end_offset, .. } = &mut instructions[forin_next_idx] {
+                if let Instruction::ForInNext { end_offset, .. } = &mut instructions[forin_next_idx]
+                {
                     *end_offset = loop_end.saturating_sub(forin_next_idx + 1);
                 }
 
@@ -395,9 +487,20 @@ impl Compiler {
                 self.patch_continues(instructions, loop_start);
                 instructions.push(Instruction::Line { line_num: line });
             }
-            Stmt::Function { name, params, body, line } => {
-                let param_ids: Vec<usize> = params.iter().map(|(p, _): &(InternedString, Option<crate::ast::Expr>)| p.id()).collect();
-                let default_params: Vec<Option<crate::ast::Expr>> = params.iter().map(|(_, d): &(InternedString, Option<crate::ast::Expr>)| d.clone()).collect();
+            Stmt::Function {
+                name,
+                params,
+                body,
+                line,
+            } => {
+                let param_ids: Vec<usize> = params
+                    .iter()
+                    .map(|(p, _): &(InternedString, Option<crate::ast::Expr>)| p.id())
+                    .collect();
+                let default_params: Vec<Option<crate::ast::Expr>> = params
+                    .iter()
+                    .map(|(_, d): &(InternedString, Option<crate::ast::Expr>)| d.clone())
+                    .collect();
 
                 let func = self.compile_function(name.id(), param_ids.clone(), body);
                 let func_index = self.functions.len();
@@ -417,8 +520,16 @@ impl Compiler {
                 instructions.push(Instruction::StoreLocal { slot });
                 instructions.push(Instruction::Line { line_num: line });
             }
-            Stmt::AsyncFunction { name, params, body, line } => {
-                let param_ids: Vec<usize> = params.iter().map(|(p, _): &(InternedString, Option<crate::ast::Expr>)| p.id()).collect();
+            Stmt::AsyncFunction {
+                name,
+                params,
+                body,
+                line,
+            } => {
+                let param_ids: Vec<usize> = params
+                    .iter()
+                    .map(|(p, _): &(InternedString, Option<crate::ast::Expr>)| p.id())
+                    .collect();
                 let func = self.compile_function(name.id(), param_ids.clone(), body);
                 let func_index = self.functions.len();
                 self.functions.push(func);
@@ -426,7 +537,10 @@ impl Compiler {
                 let func_value = Value::AsyncFunction {
                     name: func_index,
                     params: param_ids,
-                    default_params: params.iter().map(|(_, d): &(InternedString, Option<crate::ast::Expr>)| d.clone()).collect(),
+                    default_params: params
+                        .iter()
+                        .map(|(_, d): &(InternedString, Option<crate::ast::Expr>)| d.clone())
+                        .collect(),
                     body: vec![],
                     closure: Rc::new(RefCell::new(Environment::new())),
                 };
@@ -437,8 +551,16 @@ impl Compiler {
                 instructions.push(Instruction::StoreLocal { slot });
                 instructions.push(Instruction::Line { line_num: line });
             }
-            Stmt::Generator { name, params, body, line } => {
-                let param_ids: Vec<usize> = params.iter().map(|(p, _): &(InternedString, Option<crate::ast::Expr>)| p.id()).collect();
+            Stmt::Generator {
+                name,
+                params,
+                body,
+                line,
+            } => {
+                let param_ids: Vec<usize> = params
+                    .iter()
+                    .map(|(p, _): &(InternedString, Option<crate::ast::Expr>)| p.id())
+                    .collect();
                 let func = self.compile_function(name.id(), param_ids.clone(), body);
                 let func_index = self.functions.len();
                 self.functions.push(func);
@@ -466,7 +588,9 @@ impl Compiler {
                 }
             }
             Stmt::ReturnMulti(values) => {
-                instructions.push(Instruction::NewArray { capacity: values.len() });
+                instructions.push(Instruction::NewArray {
+                    capacity: values.len(),
+                });
                 for v in values {
                     self.compile_expr(instructions, v);
                     instructions.push(Instruction::ArrayPush);
@@ -478,7 +602,11 @@ impl Compiler {
                     self.compile_stmt(instructions, stmt);
                 }
             }
-            Stmt::Destructure { names, initializer, line } => {
+            Stmt::Destructure {
+                names,
+                initializer,
+                line,
+            } => {
                 self.compile_expr(instructions, initializer);
                 for (i, name) in names.iter().enumerate() {
                     let slot = self.allocate_slot();
@@ -493,7 +621,9 @@ impl Compiler {
             }
             Stmt::Import { path, alias, line } => {
                 let interned = self.string_interner.intern(&path);
-                instructions.push(Instruction::LoadGlobal { name: InternedString(interned) });
+                instructions.push(Instruction::LoadGlobal {
+                    name: InternedString(interned),
+                });
                 if let Some(alias_name) = alias {
                     let slot = self.allocate_slot();
                     self.locals.insert(alias_name.id(), slot);
@@ -505,7 +635,12 @@ impl Compiler {
                 self.compile_expr(instructions, value);
                 instructions.push(Instruction::Line { line_num: line });
             }
-            Stmt::Try { body, catch_var: _, catch_body, line } => {
+            Stmt::Try {
+                body,
+                catch_var: _,
+                catch_body,
+                line,
+            } => {
                 for stmt in body {
                     self.compile_stmt(instructions, stmt);
                 }
@@ -534,13 +669,21 @@ impl Compiler {
                     patches.push(idx);
                 }
             }
-            Stmt::Class { name, superclass: _, methods, line } => {
+            Stmt::Class {
+                name,
+                superclass: _,
+                methods,
+                line,
+            } => {
                 for (method_name, method_expr) in &methods {
                     let name_const = self.add_constant(Value::Number(method_name.id() as f64));
                     instructions.push(Instruction::LoadConstant { index: name_const });
                     self.compile_expr(instructions, method_expr.clone());
                 }
-                instructions.push(Instruction::Class { name, method_count: methods.len() });
+                instructions.push(Instruction::Class {
+                    name,
+                    method_count: methods.len(),
+                });
                 let slot = self.allocate_slot();
                 self.locals.insert(name.id(), slot);
                 instructions.push(Instruction::StoreLocal { slot });
@@ -554,7 +697,12 @@ impl Compiler {
                 instructions.push(Instruction::StoreLocal { slot });
                 instructions.push(Instruction::Line { line_num: line });
             }
-            Stmt::Set { object, name, value, line } => {
+            Stmt::Set {
+                object,
+                name,
+                value,
+                line,
+            } => {
                 self.compile_expr(instructions, *object);
                 self.compile_expr(instructions, value);
                 instructions.push(Instruction::PropertySet { name });
@@ -589,9 +737,15 @@ impl Compiler {
                 let index = self.add_constant(Value::String(s));
                 instructions.push(Instruction::LoadConstant { index });
             }
-            Expr::LiteralTrue => { instructions.push(Instruction::LoadTrue); }
-            Expr::LiteralFalse => { instructions.push(Instruction::LoadFalse); }
-            Expr::LiteralNil => { instructions.push(Instruction::LoadNil); }
+            Expr::LiteralTrue => {
+                instructions.push(Instruction::LoadTrue);
+            }
+            Expr::LiteralFalse => {
+                instructions.push(Instruction::LoadFalse);
+            }
+            Expr::LiteralNil => {
+                instructions.push(Instruction::LoadNil);
+            }
             Expr::Identifier(name) => {
                 if let Some(&slot) = self.locals.get(&name.id()) {
                     instructions.push(Instruction::LoadLocal { slot });
@@ -599,7 +753,12 @@ impl Compiler {
                     instructions.push(Instruction::LoadGlobal { name });
                 }
             }
-            Expr::Binary { left, op, right, line: _ } => {
+            Expr::Binary {
+                left,
+                op,
+                right,
+                line: _,
+            } => {
                 self.compile_expr(instructions, *left);
                 self.compile_expr(instructions, *right);
                 match op {
@@ -627,21 +786,29 @@ impl Compiler {
                     _ => {}
                 }
             }
-            Expr::Call { callee, arguments, line: _ } => {
-                if let Expr::Get { object, name, .. } = &*callee {
+            Expr::Call {
+                callee,
+                arguments,
+                line: _,
+            } => {
+                if let Expr::Get { object, .. } = &*callee {
                     self.compile_expr(instructions, *object.clone());
                     instructions.push(Instruction::This);
                     for arg in &arguments {
                         self.compile_expr(instructions, arg.clone());
                     }
                     self.compile_expr(instructions, *callee);
-                    instructions.push(Instruction::Call { arg_count: arguments.len() + 1 });
+                    instructions.push(Instruction::Call {
+                        arg_count: arguments.len() + 1,
+                    });
                 } else {
                     for arg in &arguments {
                         self.compile_expr(instructions, arg.clone());
                     }
                     self.compile_expr(instructions, *callee);
-                    instructions.push(Instruction::Call { arg_count: arguments.len() });
+                    instructions.push(Instruction::Call {
+                        arg_count: arguments.len(),
+                    });
                 }
             }
             Expr::Table { entries, line: _ } => {
@@ -652,37 +819,65 @@ impl Compiler {
                 }
             }
             Expr::Array { items, line: _ } => {
-                instructions.push(Instruction::NewArray { capacity: items.len() });
+                instructions.push(Instruction::NewArray {
+                    capacity: items.len(),
+                });
                 for item in items {
                     self.compile_expr(instructions, item);
                     instructions.push(Instruction::ArrayPush);
                 }
             }
-            Expr::Index { object, index, line: _ } => {
+            Expr::Index {
+                object,
+                index,
+                line: _,
+            } => {
                 self.compile_expr(instructions, *object);
                 self.compile_expr(instructions, *index);
                 instructions.push(Instruction::IndexGet);
             }
-            Expr::SetIndex { object, index, value, line: _ } => {
+            Expr::SetIndex {
+                object,
+                index,
+                value,
+                line: _,
+            } => {
                 self.compile_expr(instructions, *object);
                 self.compile_expr(instructions, *index);
                 self.compile_expr(instructions, *value);
                 instructions.push(Instruction::IndexSet);
             }
-            Expr::Get { object, name, line: _ } => {
+            Expr::Get {
+                object,
+                name,
+                line: _,
+            } => {
                 self.compile_expr(instructions, *object);
                 instructions.push(Instruction::PropertyGet { name });
             }
-            Expr::SetProperty { object, name, value, line: _ } => {
+            Expr::SetProperty {
+                object,
+                name,
+                value,
+                line: _,
+            } => {
                 self.compile_expr(instructions, *object);
                 self.compile_expr(instructions, *value);
                 instructions.push(Instruction::PropertySet { name });
             }
-            Expr::SafeGet { object, name, line: _ } => {
+            Expr::SafeGet {
+                object,
+                name,
+                line: _,
+            } => {
                 self.compile_expr(instructions, *object);
                 instructions.push(Instruction::PropertyGet { name });
             }
-            Expr::Range { start, end, line: _ } => {
+            Expr::Range {
+                start,
+                end,
+                line: _,
+            } => {
                 self.compile_expr(instructions, *start);
                 self.compile_expr(instructions, *end);
                 instructions.push(Instruction::NewRange);
@@ -694,9 +889,14 @@ impl Compiler {
             Expr::Throw { expr, line: _ } => {
                 self.compile_expr(instructions, *expr);
             }
-            Expr::FunctionLiteral { params, body, line: _ } => {
+            Expr::FunctionLiteral {
+                params,
+                body,
+                line: _,
+            } => {
                 let param_ids: Vec<usize> = params.iter().map(|(p, _)| p.id()).collect();
-                let default_params: Vec<Option<crate::ast::Expr>> = params.iter().map(|(_, d)| d.clone()).collect();
+                let default_params: Vec<Option<crate::ast::Expr>> =
+                    params.iter().map(|(_, d)| d.clone()).collect();
                 let func = self.compile_function(0, param_ids.clone(), body);
                 let func_index = self.functions.len();
                 self.functions.push(func);
@@ -710,9 +910,14 @@ impl Compiler {
                 let const_index = self.add_constant(func_value);
                 instructions.push(Instruction::LoadConstant { index: const_index });
             }
-            Expr::Lambda { params, body, line: _ } => {
+            Expr::Lambda {
+                params,
+                body,
+                line: _,
+            } => {
                 let param_ids: Vec<usize> = params.iter().map(|(p, _)| p.id()).collect();
-                let func = self.compile_function(0, param_ids.clone(), vec![Stmt::Return(Some(*body))]);
+                let func =
+                    self.compile_function(0, param_ids.clone(), vec![Stmt::Return(Some(*body))]);
                 let func_index = self.functions.len();
                 self.functions.push(func);
                 let func_value = Value::Function {
@@ -729,36 +934,67 @@ impl Compiler {
                 self.compile_expr(instructions, *expr);
                 instructions.push(Instruction::Spread);
             }
-            Expr::NullCoalesce { left, right, line: _ } => {
+            Expr::NullCoalesce {
+                left,
+                right,
+                line: _,
+            } => {
                 self.compile_expr(instructions, *left);
                 self.compile_expr(instructions, *right);
                 instructions.push(Instruction::NullCoalesce);
             }
-            Expr::Match { value, arms, line: _ } => {
+            Expr::Match {
+                value,
+                arms,
+                line: _,
+            } => {
                 self.compile_expr(instructions, *value);
-                instructions.push(Instruction::Match { arm_count: arms.len() });
+                instructions.push(Instruction::Match {
+                    arm_count: arms.len(),
+                });
             }
             Expr::Require { path, line: _ } => {
                 let interned = self.string_interner.intern(&path);
-                instructions.push(Instruction::Require { path: InternedString(interned) });
+                instructions.push(Instruction::Require {
+                    path: InternedString(interned),
+                });
             }
-            Expr::Export { name, value, line: _ } => {
+            Expr::Export {
+                name,
+                value,
+                line: _,
+            } => {
                 self.compile_expr(instructions, *value);
                 instructions.push(Instruction::Export { name });
             }
-            Expr::Class { name, superclass: _, methods, line: _ } => {
+            Expr::Class {
+                name,
+                superclass: _,
+                methods,
+                line: _,
+            } => {
                 for (method_name, method_expr) in &methods {
                     let name_const = self.add_constant(Value::Number(method_name.id() as f64));
                     instructions.push(Instruction::LoadConstant { index: name_const });
                     self.compile_expr(instructions, method_expr.clone());
                 }
-                instructions.push(Instruction::Class { name, method_count: methods.len() });
+                instructions.push(Instruction::Class {
+                    name,
+                    method_count: methods.len(),
+                });
             }
-            Expr::NewInstance { class_name, arguments, line: _ } => {
+            Expr::NewInstance {
+                class_name,
+                arguments,
+                line: _,
+            } => {
                 for arg in &arguments {
                     self.compile_expr(instructions, arg.clone());
                 }
-                instructions.push(Instruction::NewInstance { class_name, arg_count: arguments.len() });
+                instructions.push(Instruction::NewInstance {
+                    class_name,
+                    arg_count: arguments.len(),
+                });
             }
             Expr::FString { parts, line: _ } => {
                 let mut result = String::new();
@@ -785,7 +1021,11 @@ impl Compiler {
                 }
                 instructions.push(Instruction::Set);
             }
-            Expr::AsyncFunctionLiteral { params, body, line: _ } => {
+            Expr::AsyncFunctionLiteral {
+                params,
+                body,
+                line: _,
+            } => {
                 let param_ids: Vec<usize> = params.iter().map(|(p, _)| p.id()).collect();
                 let func = self.compile_function(0, param_ids.clone(), body);
                 let func_index = self.functions.len();
@@ -800,7 +1040,11 @@ impl Compiler {
                 let const_index = self.add_constant(func_value);
                 instructions.push(Instruction::LoadConstant { index: const_index });
             }
-            Expr::GeneratorLiteral { params, body, line: _ } => {
+            Expr::GeneratorLiteral {
+                params,
+                body,
+                line: _,
+            } => {
                 let param_ids: Vec<usize> = params.iter().map(|(p, _)| p.id()).collect();
                 let func = self.compile_function(0, param_ids.clone(), body);
                 let func_index = self.functions.len();
@@ -862,6 +1106,7 @@ pub struct VirtualMachine {
     functions: Vec<BytecodeFunction>,
     this_stack: Vec<Value>,
     iterators: Vec<IteratorState>,
+    security: crate::safety::SecurityContext,
 }
 
 impl VirtualMachine {
@@ -874,7 +1119,12 @@ impl VirtualMachine {
             functions: Vec::new(),
             this_stack: Vec::new(),
             iterators: Vec::new(),
+            security: crate::safety::SecurityContext::new(),
         }
+    }
+
+    pub fn set_security_level(&mut self, level: crate::safety::SecurityLevel) {
+        self.security.apply_level(&level);
     }
 
     pub fn execute(&mut self, program: &BytecodeProgram) -> Result<(), String> {
@@ -924,9 +1174,15 @@ impl VirtualMachine {
                 }
                 self.stack.push(Value::Nil);
             }
-            Instruction::LoadNil => { self.stack.push(Value::Nil); }
-            Instruction::LoadTrue => { self.stack.push(Value::Bool(true)); }
-            Instruction::LoadFalse => { self.stack.push(Value::Bool(false)); }
+            Instruction::LoadNil => {
+                self.stack.push(Value::Nil);
+            }
+            Instruction::LoadTrue => {
+                self.stack.push(Value::Bool(true));
+            }
+            Instruction::LoadFalse => {
+                self.stack.push(Value::Bool(false));
+            }
             Instruction::LoadLocal { slot } => {
                 if let Some(frame) = self.call_frames.last() {
                     let local_idx = frame.frame_start + slot;
@@ -949,6 +1205,14 @@ impl VirtualMachine {
                 }
             }
             Instruction::LoadGlobal { name } => {
+                if let Some(func_name) = self.interner.get(name.id()) {
+                    if !self.security.is_function_allowed(func_name) {
+                        return Err(format!(
+                            "Function '{}' is blocked by security policy",
+                            func_name
+                        ));
+                    }
+                }
                 if let Some(value) = self.globals.get(&name.id()).cloned() {
                     self.stack.push(value);
                 } else {
@@ -975,13 +1239,21 @@ impl VirtualMachine {
             })?,
             Instruction::Divide => self.binary_op(|a, b| match (a, b) {
                 (Value::Number(l), Value::Number(r)) => {
-                    if r == 0.0 { Err("Division by zero".to_string()) } else { Ok(Value::Number(l / r)) }
+                    if r == 0.0 {
+                        Err("Division by zero".to_string())
+                    } else {
+                        Ok(Value::Number(l / r))
+                    }
                 }
                 _ => Err("Invalid operands for /".to_string()),
             })?,
             Instruction::Modulo => self.binary_op(|a, b| match (a, b) {
                 (Value::Number(l), Value::Number(r)) => {
-                    if r == 0.0 { Err("Modulo by zero".to_string()) } else { Ok(Value::Number(l % r)) }
+                    if r == 0.0 {
+                        Err("Modulo by zero".to_string())
+                    } else {
+                        Ok(Value::Number(l % r))
+                    }
                 }
                 _ => Err("Invalid operands for %".to_string()),
             })?,
@@ -1100,19 +1372,16 @@ impl VirtualMachine {
                 self.stack.push(Value::new_table());
             }
             Instruction::ArrayPush => {
-                if let (Some(value), Some(array)) = (self.stack.pop(), self.stack.pop()) {
-                    if let Value::Array(arr) = array {
-                        arr.borrow_mut().push(value);
-                        self.stack.push(Value::Array(arr));
-                    }
+                if let (Some(value), Some(Value::Array(arr))) = (self.stack.pop(), self.stack.pop())
+                {
+                    arr.borrow_mut().push(value);
+                    self.stack.push(Value::Array(arr));
                 }
             }
             Instruction::TableSet { key } => {
-                if let (Some(value), Some(table)) = (self.stack.pop(), self.stack.pop()) {
-                    if let Value::Table(t) = table {
-                        t.borrow_mut().insert(key.id(), value);
-                        self.stack.push(Value::Table(t));
-                    }
+                if let (Some(value), Some(Value::Table(t))) = (self.stack.pop(), self.stack.pop()) {
+                    t.borrow_mut().insert(key.id(), value);
+                    self.stack.push(Value::Table(t));
                 }
             }
             Instruction::IndexGet => {
@@ -1122,7 +1391,9 @@ impl VirtualMachine {
                 }
             }
             Instruction::IndexSet => {
-                if let (Some(value), Some(index), Some(object)) = (self.stack.pop(), self.stack.pop(), self.stack.pop()) {
+                if let (Some(value), Some(index), Some(object)) =
+                    (self.stack.pop(), self.stack.pop(), self.stack.pop())
+                {
                     self.set_index(object, index, value)?;
                 }
             }
@@ -1143,7 +1414,10 @@ impl VirtualMachine {
                     self.stack.push(result);
                 }
             }
-            Instruction::Lambda { param_count: _, func_index } => {
+            Instruction::Lambda {
+                param_count: _,
+                func_index,
+            } => {
                 if func_index < self.functions.len() {
                     let func = self.functions[func_index].clone();
                     let func_value = Value::Function {
@@ -1156,7 +1430,10 @@ impl VirtualMachine {
                     self.stack.push(func_value);
                 }
             }
-            Instruction::NewInstance { class_name: _, arg_count } => {
+            Instruction::NewInstance {
+                class_name: _,
+                arg_count,
+            } => {
                 let args: Vec<Value> = self.stack.split_off(self.stack.len() - arg_count);
                 if let Some(class) = self.stack.pop() {
                     let instance = self.instantiate_class(class, args)?;
@@ -1172,12 +1449,11 @@ impl VirtualMachine {
                 let mut found = false;
                 if let Value::Table(t) = &this {
                     let super_key = self.interner.get_id("__superclass__").unwrap_or(usize::MAX);
-                    if let Some(superclass) = t.borrow().get(&super_key).cloned() {
-                        if let Value::Table(st) = &superclass {
-                            if let Some(method_val) = st.borrow().get(&method.id()).cloned() {
-                                self.stack.push(method_val);
-                                found = true;
-                            }
+                    let superclass = t.borrow().get(&super_key).cloned();
+                    if let Some(Value::Table(st)) = superclass {
+                        if let Some(method_val) = st.borrow().get(&method.id()).cloned() {
+                            self.stack.push(method_val);
+                            found = true;
                         }
                     }
                 }
@@ -1186,12 +1462,10 @@ impl VirtualMachine {
                 }
             }
             Instruction::Spread => {
-                if let Some(value) = self.stack.pop() {
-                    if let Value::Array(arr) = value {
-                        let items = arr.borrow().clone();
-                        for item in items {
-                            self.stack.push(item);
-                        }
+                if let Some(Value::Array(arr)) = self.stack.pop() {
+                    let items = arr.borrow().clone();
+                    for item in items {
+                        self.stack.push(item);
                     }
                 }
             }
@@ -1200,7 +1474,8 @@ impl VirtualMachine {
                 self.stack.push(match_value);
             }
             Instruction::Require { path } => {
-                self.stack.push(Value::String(format!("<module {:?}>", path)));
+                self.stack
+                    .push(Value::String(format!("<module {:?}>", path)));
             }
             Instruction::Export { name } => {
                 if let Some(value) = self.stack.pop() {
@@ -1213,10 +1488,8 @@ impl VirtualMachine {
                 let mut methods = IndexMap::new();
                 for _ in 0..method_count {
                     if let Some(method) = self.stack.pop() {
-                        if let Some(name_val) = self.stack.pop() {
-                            if let Value::Number(name_id) = name_val {
-                                methods.insert(name_id as usize, method);
-                            }
+                        if let Some(Value::Number(name_id)) = self.stack.pop() {
+                            methods.insert(name_id as usize, method);
                         }
                     }
                 }
@@ -1252,7 +1525,10 @@ impl VirtualMachine {
                 };
                 self.iterators.push(iter_state);
             }
-            Instruction::ForInNext { var_slot, end_offset } => {
+            Instruction::ForInNext {
+                var_slot,
+                end_offset,
+            } => {
                 if let Some(iter) = self.iterators.last_mut() {
                     let next_value = match iter {
                         IteratorState::Array { values, index } => {
@@ -1260,21 +1536,27 @@ impl VirtualMachine {
                                 let v = values[*index].clone();
                                 *index += 1;
                                 Some(v)
-                            } else { None }
+                            } else {
+                                None
+                            }
                         }
                         IteratorState::Range { current, end } => {
                             if *current < *end {
                                 let v = Value::Number(*current as f64);
                                 *current += 1;
                                 Some(v)
-                            } else { None }
+                            } else {
+                                None
+                            }
                         }
                         IteratorState::Table { values, index } => {
                             if *index < values.len() {
                                 let v = values[*index].clone();
                                 *index += 1;
                                 Some(v)
-                            } else { None }
+                            } else {
+                                None
+                            }
                         }
                     };
 
@@ -1338,7 +1620,12 @@ impl VirtualMachine {
                 let result = func(&args, &mut self.interner)?;
                 Ok(Some(result))
             }
-            Value::Function { name, params, default_params, .. } => {
+            Value::Function {
+                name,
+                params,
+                default_params,
+                ..
+            } => {
                 if name < self.functions.len() {
                     let func = self.functions[name].clone();
                     let frame_start = self.stack.len();
@@ -1374,7 +1661,11 @@ impl VirtualMachine {
                     let func = self.functions[name].clone();
                     let frame_start = self.stack.len();
                     for (i, _) in params.iter().enumerate() {
-                        let val = if i < args.len() { args[i].clone() } else { Value::Nil };
+                        let val = if i < args.len() {
+                            args[i].clone()
+                        } else {
+                            Value::Nil
+                        };
                         self.stack.push(val);
                     }
                     for _ in params.len()..func.max_slots {
@@ -1395,7 +1686,11 @@ impl VirtualMachine {
                     let func = self.functions[name].clone();
                     let frame_start = self.stack.len();
                     for (i, _) in params.iter().enumerate() {
-                        let val = if i < args.len() { args[i].clone() } else { Value::Nil };
+                        let val = if i < args.len() {
+                            args[i].clone()
+                        } else {
+                            Value::Nil
+                        };
                         self.stack.push(val);
                     }
                     for _ in params.len()..func.max_slots {

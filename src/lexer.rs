@@ -42,7 +42,7 @@ pub enum TokenKind {
     Break,
     #[token("continue")]
     Continue,
-    
+
     // Classes and OOP
     #[token("class")]
     Class,
@@ -54,13 +54,13 @@ pub enum TokenKind {
     Super,
     #[token("new")]
     New,
-    
+
     // Modules
     #[token("export")]
     Export,
     #[token("require")]
     Require,
-    
+
     // Pattern matching
     #[token("match")]
     Match,
@@ -131,7 +131,7 @@ pub enum TokenKind {
     #[token("...")]
     DotDotDot,
 
-   // Brackets and separators
+    // Brackets and separators
     #[token("(")]
     LParen,
     #[token(")")]
@@ -222,12 +222,12 @@ pub fn tokenize_with_interner(
             }
 
             let lexeme = lexer.slice();
-            
+
             // Intern identifiers for faster comparison
             if matches!(kind, TokenKind::Identifier) {
                 let _id = interner.intern(lexeme);
             }
-            
+
             tokens.push(Token {
                 lexeme: lexeme.to_string(),
                 kind,
@@ -369,8 +369,17 @@ mod tests {
     fn test_tokenize_comments() {
         let tokens = tokenize("let x = 10 // this is a comment\nlet y = 20");
         // Comments should be skipped
-        assert_eq!(tokens.iter().filter(|t| t.kind == TokenKind::Let).count(), 2);
-        assert_eq!(tokens.iter().filter(|t| t.kind == TokenKind::Identifier).count(), 2);
+        assert_eq!(
+            tokens.iter().filter(|t| t.kind == TokenKind::Let).count(),
+            2
+        );
+        assert_eq!(
+            tokens
+                .iter()
+                .filter(|t| t.kind == TokenKind::Identifier)
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -384,8 +393,8 @@ mod tests {
     fn test_tokenize_line_numbers() {
         let tokens = tokenize("let x = 10\nlet y = 20\nlet z = 30");
         assert_eq!(tokens[0].line, 1);
-        assert_eq!(tokens[4].line, 2);  // Second 'let' is on line 2
-        assert_eq!(tokens[8].line, 3);  // Third 'let' is on line 3
+        assert_eq!(tokens[4].line, 2); // Second 'let' is on line 2
+        assert_eq!(tokens[8].line, 3); // Third 'let' is on line 3
     }
 
     #[test]

@@ -1,6 +1,6 @@
+use crate::ast::{Expr, MatchArm, Pattern, Program, Stmt};
 use crate::lexer::{Token, TokenKind};
-use crate::ast::{Expr, Stmt, Program, Pattern, MatchArm};
-use crate::string_intern::{StringInterner, InternedString};
+use crate::string_intern::{InternedString, StringInterner};
 use std::sync::OnceLock;
 
 const MAX_PARSER_RECURSION_DEPTH: usize = 500;
@@ -31,11 +31,17 @@ pub struct ParseError {
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens, current: 0, interner: None, recursion_depth: 0, errors: Vec::new() }
+        Self::with_interner(tokens, StringInterner::new())
     }
 
     pub fn with_interner(tokens: Vec<Token>, interner: StringInterner) -> Self {
-        Parser { tokens, current: 0, interner: Some(interner), recursion_depth: 0, errors: Vec::new() }
+        Parser {
+            tokens,
+            current: 0,
+            interner: Some(interner),
+            recursion_depth: 0,
+            errors: Vec::new(),
+        }
     }
 
     pub fn errors(&self) -> &[ParseError] {
@@ -62,10 +68,18 @@ impl Parser {
                 return;
             }
             match self.peek().kind {
-                TokenKind::Let | TokenKind::Const | TokenKind::Function |
-                TokenKind::If | TokenKind::While | TokenKind::For |
-                TokenKind::Return | TokenKind::Class | TokenKind::Import |
-                TokenKind::Export | TokenKind::Try | TokenKind::Async => return,
+                TokenKind::Let
+                | TokenKind::Const
+                | TokenKind::Function
+                | TokenKind::If
+                | TokenKind::While
+                | TokenKind::For
+                | TokenKind::Return
+                | TokenKind::Class
+                | TokenKind::Import
+                | TokenKind::Export
+                | TokenKind::Try
+                | TokenKind::Async => return,
                 _ => {}
             }
             self.advance();
@@ -110,7 +124,11 @@ impl Parser {
         self.consume(&TokenKind::Equal, "Expected '=' in destructuring")?;
         let initializer = self.expression()?;
         self.match_token(&TokenKind::Semicolon);
-        Ok(Stmt::Destructure { names, initializer, line })
+        Ok(Stmt::Destructure {
+            names,
+            initializer,
+            line,
+        })
     }
 
     fn destructure_table(&mut self, line: usize) -> Result<Stmt, String> {
@@ -129,7 +147,11 @@ impl Parser {
         self.consume(&TokenKind::Equal, "Expected '=' in destructuring")?;
         let initializer = self.expression()?;
         self.match_token(&TokenKind::Semicolon);
-        Ok(Stmt::Destructure { names, initializer, line })
+        Ok(Stmt::Destructure {
+            names,
+            initializer,
+            line,
+        })
     }
 
     fn declaration(&mut self) -> Result<Stmt, String> {
@@ -151,7 +173,12 @@ impl Parser {
             self.consume(&TokenKind::Equal, "Expected '=' after const declaration")?;
             let initializer = Some(self.expression()?);
             self.match_token(&TokenKind::Semicolon);
-            return Ok(Stmt::Declaration { name, initializer, line, is_const: true });
+            return Ok(Stmt::Declaration {
+                name,
+                initializer,
+                line,
+                is_const: true,
+            });
         }
         if self.match_token(&TokenKind::Let) {
             if self.check(&TokenKind::LBracket) {
@@ -168,7 +195,12 @@ impl Parser {
                 None
             };
             self.match_token(&TokenKind::Semicolon);
-            return Ok(Stmt::Declaration { name, initializer, line, is_const });
+            return Ok(Stmt::Declaration {
+                name,
+                initializer,
+                line,
+                is_const,
+            });
         }
         if self.match_token(&TokenKind::Function) {
             return self.function_declaration(line);
@@ -184,13 +216,15 @@ impl Parser {
             return Err("Expected string path after 'import'".to_string());
         }
         let path = self.previous().lexeme.clone();
-        let path = path[1..path.len()-1].to_string();
+        let path = path[1..path.len() - 1].to_string();
         let alias = if self.match_token(&TokenKind::As) {
             if !self.match_token(&TokenKind::Identifier) {
                 return Err("Expected identifier after 'as'".to_string());
             }
             Some(self.intern(&self.previous().lexeme.clone()))
-        } else { None };
+        } else {
+            None
+        };
         self.match_token(&TokenKind::Semicolon);
         Ok(Stmt::Import { path, alias, line })
     }
@@ -207,10 +241,12 @@ impl Parser {
         let name = self.consume_identifier()?;
         let superclass = if self.match_token(&TokenKind::Extends) {
             Some(self.consume_identifier()?)
-        } else { None };
+        } else {
+            None
+        };
         self.consume(&TokenKind::LBrace, "Expected '{' before class body")?;
         let mut methods = Vec::new();
-        
+
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             if self.match_token(&TokenKind::Function) {
                 let method_name = self.consume_identifier()?;
@@ -221,9 +257,13 @@ impl Parser {
                         let param_name = self.consume_identifier()?;
                         let default = if self.match_token(&TokenKind::Equal) {
                             Some(self.expression()?)
-                        } else { None };
+                        } else {
+                            None
+                        };
                         params.push((param_name, default));
-                        if !self.match_token(&TokenKind::Comma) { break; }
+                        if !self.match_token(&TokenKind::Comma) {
+                            break;
+                        }
                     }
                 }
                 self.consume(&TokenKind::RParen, "Expected ')' after parameters")?;
@@ -247,38 +287,19 @@ impl Parser {
                 self.advance();
             }
         }
-        
+
         self.consume(&TokenKind::RBrace, "Expected '}' after class body")?;
         self.match_token(&TokenKind::Semicolon);
-        Ok(Stmt::Class { name, superclass, methods, line })
-    }
-
-    fn variable_declaration(&mut self, line: usize) -> Result<Stmt, String> {
-        let is_const = self.previous().kind == TokenKind::Const;
-        if self.match_token(&TokenKind::LBrace) {
-            let mut names = Vec::new();
-            loop {
-                names.push(self.consume_identifier()?);
-                if !self.match_token(&TokenKind::Comma) { break; }
-            }
-            self.consume(&TokenKind::RBrace, "Expected '}' after destructuring")?;
-            self.consume(&TokenKind::Equal, "Expected '=' after destructuring")?;
-            let initializer = self.expression()?;
-            self.match_token(&TokenKind::Semicolon);
-            return Ok(Stmt::Destructure { names, initializer, line });
-        }
-        let name = self.consume_identifier()?;
-        let initializer = if self.match_token(&TokenKind::Equal) {
-            Some(self.expression()?)
-        } else { None };
-        self.match_token(&TokenKind::Semicolon);
-        Ok(Stmt::Declaration { name, initializer, line, is_const })
+        Ok(Stmt::Class {
+            name,
+            superclass,
+            methods,
+            line,
+        })
     }
 
     fn function_declaration(&mut self, line: usize) -> Result<Stmt, String> {
         let first_name = self.consume_identifier()?;
-
-        // === Поддержка синтаксиса function Namespace.method() ===
         if self.match_token(&TokenKind::Dot) {
             let method_name = self.consume_identifier()?;
             self.consume(&TokenKind::LParen, "Expected '(' after method name")?;
@@ -288,9 +309,13 @@ impl Parser {
                     let param_name = self.consume_identifier()?;
                     let default = if self.match_token(&TokenKind::Equal) {
                         Some(self.expression()?)
-                    } else { None };
+                    } else {
+                        None
+                    };
                     params.push((param_name, default));
-                    if !self.match_token(&TokenKind::Comma) { break; }
+                    if !self.match_token(&TokenKind::Comma) {
+                        break;
+                    }
                 }
             }
             self.consume(&TokenKind::RParen, "Expected ')' after parameters")?;
@@ -298,11 +323,7 @@ impl Parser {
             let body = self.block()?;
             self.consume(&TokenKind::RBrace, "Expected '}' after function body")?;
 
-            let func_expr = Expr::FunctionLiteral {
-                params,
-                body,
-                line,
-            };
+            let func_expr = Expr::FunctionLiteral { params, body, line };
 
             let target_obj = Expr::Identifier(first_name);
             return Ok(Stmt::Expression(Expr::SetProperty {
@@ -321,16 +342,25 @@ impl Parser {
                 let param_name = self.consume_identifier()?;
                 let default = if self.match_token(&TokenKind::Equal) {
                     Some(self.expression()?)
-                } else { None };
+                } else {
+                    None
+                };
                 params.push((param_name, default));
-                if !self.match_token(&TokenKind::Comma) { break; }
+                if !self.match_token(&TokenKind::Comma) {
+                    break;
+                }
             }
         }
         self.consume(&TokenKind::RParen, "Expected ')' after parameters")?;
         self.consume(&TokenKind::LBrace, "Expected '{' before function body")?;
         let body = self.block()?;
         self.consume(&TokenKind::RBrace, "Expected '}' after function body")?;
-        Ok(Stmt::Function { name: first_name, params, body, line })
+        Ok(Stmt::Function {
+            name: first_name,
+            params,
+            body,
+            line,
+        })
     }
 
     fn async_declaration(&mut self, line: usize) -> Result<Stmt, String> {
@@ -345,16 +375,28 @@ impl Parser {
                 let param_name = self.consume_identifier()?;
                 let default = if self.match_token(&TokenKind::Equal) {
                     Some(self.expression()?)
-                } else { None };
+                } else {
+                    None
+                };
                 params.push((param_name, default));
-                if !self.match_token(&TokenKind::Comma) { break; }
+                if !self.match_token(&TokenKind::Comma) {
+                    break;
+                }
             }
         }
         self.consume(&TokenKind::RParen, "Expected ')' after parameters")?;
-        self.consume(&TokenKind::LBrace, "Expected '{' before async function body")?;
+        self.consume(
+            &TokenKind::LBrace,
+            "Expected '{' before async function body",
+        )?;
         let body = self.block()?;
         self.consume(&TokenKind::RBrace, "Expected '}' after async function body")?;
-        Ok(Stmt::AsyncFunction { name, params, body, line })
+        Ok(Stmt::AsyncFunction {
+            name,
+            params,
+            body,
+            line,
+        })
     }
 
     fn try_statement(&mut self, line: usize) -> Result<Stmt, String> {
@@ -375,45 +417,78 @@ impl Parser {
             catch_body = self.block()?;
             self.consume(&TokenKind::RBrace, "Expected '}' after catch block")?;
         }
-        Ok(Stmt::Try { body, catch_var, catch_body, line })
+        Ok(Stmt::Try {
+            body,
+            catch_var,
+            catch_body,
+            line,
+        })
     }
 
     fn statement(&mut self) -> Result<Stmt, String> {
         let line = self.peek().line;
-        if self.match_token(&TokenKind::If) { return self.if_statement(line); }
-        if self.match_token(&TokenKind::While) { return self.while_statement(line); }
-        if self.match_token(&TokenKind::For) { return self.for_statement(line); }
-        if self.match_token(&TokenKind::Return) { return self.return_statement(line); }
-        if self.match_token(&TokenKind::Break) { return Ok(Stmt::Break); }
-        if self.match_token(&TokenKind::Continue) { return Ok(Stmt::Continue); }
-        if self.match_token(&TokenKind::Throw) { return self.throw_statement(line); }
-        if self.check(&TokenKind::LBrace) { return self.block().map(Stmt::Block); }
-        if self.check(&TokenKind::Identifier) && self.current + 1 < self.tokens.len() && self.tokens[self.current + 1].kind == TokenKind::Equal {
+        if self.match_token(&TokenKind::If) {
+            return self.if_statement(line);
+        }
+        if self.match_token(&TokenKind::While) {
+            return self.while_statement(line);
+        }
+        if self.match_token(&TokenKind::For) {
+            return self.for_statement(line);
+        }
+        if self.match_token(&TokenKind::Return) {
+            return self.return_statement(line);
+        }
+        if self.match_token(&TokenKind::Break) {
+            return Ok(Stmt::Break);
+        }
+        if self.match_token(&TokenKind::Continue) {
+            return Ok(Stmt::Continue);
+        }
+        if self.match_token(&TokenKind::Throw) {
+            return self.throw_statement(line);
+        }
+        if self.match_token(&TokenKind::LBrace) {
+            let stmts = self.block()?;
+            self.consume(&TokenKind::RBrace, "Expected '}' after block")?;
+            return Ok(Stmt::Block(stmts));
+        }
+        if self.check(&TokenKind::Identifier)
+            && self.current + 1 < self.tokens.len()
+            && self.tokens[self.current + 1].kind == TokenKind::Equal
+        {
             return self.assignment_statement(line);
         }
         self.expression_statement()
     }
-    
-    fn expression_statement(&mut self) -> Result<Stmt, String> {
-            let line = self.peek().line;
-            let expr = self.expression()?;
-            if self.match_token(&TokenKind::Equal) {
-                let value = self.expression()?;
-                self.match_token(&TokenKind::Semicolon);
-                match expr {
-                    Expr::Get { object, name, .. } => {
-                        return Ok(Stmt::Set { object, name, value, line });
-                    }
-                    _ => return Err("Invalid assignment target".to_string()),
-                }
-            }
-            self.recursion_depth -= 1;
-            self.match_token(&TokenKind::Semicolon);
-            Ok(Stmt::Expression(expr))
-        }
 
-        fn return_statement(&mut self, _line: usize) -> Result<Stmt, String> {
-        if self.match_token(&TokenKind::Semicolon) || self.check(&TokenKind::RBrace) || self.is_at_end() {
+    fn expression_statement(&mut self) -> Result<Stmt, String> {
+        let line = self.peek().line;
+        let expr = self.expression()?;
+        if self.match_token(&TokenKind::Equal) {
+            let value = self.expression()?;
+            self.match_token(&TokenKind::Semicolon);
+            match expr {
+                Expr::Get { object, name, .. } => {
+                    return Ok(Stmt::Set {
+                        object,
+                        name,
+                        value,
+                        line,
+                    });
+                }
+                _ => return Err("Invalid assignment target".to_string()),
+            }
+        }
+        self.match_token(&TokenKind::Semicolon);
+        Ok(Stmt::Expression(expr))
+    }
+
+    fn return_statement(&mut self, _line: usize) -> Result<Stmt, String> {
+        if self.match_token(&TokenKind::Semicolon)
+            || self.check(&TokenKind::RBrace)
+            || self.is_at_end()
+        {
             return Ok(Stmt::Return(None));
         }
         let mut values = vec![self.expression()?];
@@ -438,7 +513,12 @@ impl Parser {
                 self.consume(&TokenKind::LBrace, "Expected '{' after for-in")?;
                 let body = self.block()?;
                 self.consume(&TokenKind::RBrace, "Expected '}' after for-in body")?;
-                return Ok(Stmt::ForIn { variable: var_name, iterable, body, line });
+                return Ok(Stmt::ForIn {
+                    variable: var_name,
+                    iterable,
+                    body,
+                    line,
+                });
             } else {
                 self.current = saved_current;
             }
@@ -449,33 +529,55 @@ impl Parser {
             let name = self.consume_identifier()?;
             self.consume(&TokenKind::Equal, "Expected '=' in for initializer")?;
             let init_expr = self.expression()?;
-            Some(Box::new(Expr::Binary { left: Box::new(Expr::Identifier(name)), op: TokenKind::Equal, right: Box::new(init_expr), line }))
-        } else if !self.check(&TokenKind::Semicolon) && !self.check(&TokenKind::LBrace) && !self.check(&TokenKind::RParen) {
+            Some(Box::new(Expr::Binary {
+                left: Box::new(Expr::Identifier(name)),
+                op: TokenKind::Equal,
+                right: Box::new(init_expr),
+                line,
+            }))
+        } else if !self.check(&TokenKind::Semicolon)
+            && !self.check(&TokenKind::LBrace)
+            && !self.check(&TokenKind::RParen)
+        {
             Some(Box::new(self.expression()?))
-        } else { None };
+        } else {
+            None
+        };
         let condition;
         let increment;
         if has_parens {
             self.consume(&TokenKind::Semicolon, "Expected ';' after for initializer")?;
             condition = if !self.check(&TokenKind::Semicolon) && !self.check(&TokenKind::RParen) {
                 Box::new(self.expression()?)
-            } else { Box::new(Expr::LiteralTrue) };
+            } else {
+                Box::new(Expr::LiteralTrue)
+            };
             self.consume(&TokenKind::Semicolon, "Expected ';' after for condition")?;
             increment = if !self.check(&TokenKind::RParen) {
                 Some(Box::new(self.expression()?))
-            } else { None };
+            } else {
+                None
+            };
             self.consume(&TokenKind::RParen, "Expected ')' after for increment")?;
         } else {
             condition = if initializer.is_some() {
                 self.consume(&TokenKind::Comma, "Expected ',' after for initializer")?;
                 Box::new(self.expression()?)
-            } else { Box::new(Expr::LiteralTrue) };
+            } else {
+                Box::new(Expr::LiteralTrue)
+            };
             increment = None;
         }
         self.consume(&TokenKind::LBrace, "Expected '{' after for header")?;
         let body = self.block()?;
         self.consume(&TokenKind::RBrace, "Expected '}' after for body")?;
-        Ok(Stmt::For { initializer, condition, increment, body, line })
+        Ok(Stmt::For {
+            initializer,
+            condition,
+            increment,
+            body,
+            line,
+        })
     }
 
     fn throw_statement(&mut self, line: usize) -> Result<Stmt, String> {
@@ -489,7 +591,12 @@ impl Parser {
         self.consume(&TokenKind::Equal, "Expected '=' after variable name")?;
         let value = self.expression()?;
         self.match_token(&TokenKind::Semicolon);
-        Ok(Stmt::Assignment { name, value, line, is_const_assign: false })
+        Ok(Stmt::Assignment {
+            name,
+            value,
+            line,
+            is_const_assign: false,
+        })
     }
 
     fn if_statement(&mut self, line: usize) -> Result<Stmt, String> {
@@ -502,8 +609,15 @@ impl Parser {
             let branch = self.block()?;
             self.consume(&TokenKind::RBrace, "Expected '}' after else branch")?;
             Some(branch)
-        } else { None };
-        Ok(Stmt::If { condition, then_branch, else_branch, line })
+        } else {
+            None
+        };
+        Ok(Stmt::If {
+            condition,
+            then_branch,
+            else_branch,
+            line,
+        })
     }
 
     fn while_statement(&mut self, line: usize) -> Result<Stmt, String> {
@@ -511,7 +625,11 @@ impl Parser {
         self.consume(&TokenKind::LBrace, "Expected '{' after while condition")?;
         let body = self.block()?;
         self.consume(&TokenKind::RBrace, "Expected '}' after while body")?;
-        Ok(Stmt::While { condition, body, line })
+        Ok(Stmt::While {
+            condition,
+            body,
+            line,
+        })
     }
 
     fn block(&mut self) -> Result<Vec<Stmt>, String> {
@@ -523,125 +641,225 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<Expr, String> {
-        self.null_coalesce_expr()
+        if self.recursion_depth >= MAX_PARSER_RECURSION_DEPTH {
+            return Err(format!(
+                "Parser recursion depth limit exceeded (max: {})",
+                MAX_PARSER_RECURSION_DEPTH
+            ));
+        }
+        self.recursion_depth += 1;
+        let result = self.null_coalesce_expr();
+        self.recursion_depth -= 1;
+        result
     }
 
     fn null_coalesce_expr(&mut self) -> Result<Expr, String> {
         if self.recursion_depth >= MAX_PARSER_RECURSION_DEPTH {
-            return Err(format!("Parser recursion depth limit exceeded (max: {})", MAX_PARSER_RECURSION_DEPTH));
+            return Err(format!(
+                "Parser recursion depth limit exceeded (max: {})",
+                MAX_PARSER_RECURSION_DEPTH
+            ));
         }
         self.recursion_depth += 1;
-        let line = self.peek().line;
-        let mut left = self.or_expr()?;
-        while self.match_token(&TokenKind::NullCoalesce) {
-            let right = self.or_expr()?;
-            left = Expr::NullCoalesce { left: Box::new(left), right: Box::new(right), line };
-        }
+        let result = (|| {
+            let line = self.peek().line;
+            let mut left = self.or_expr()?;
+            while self.match_token(&TokenKind::NullCoalesce) {
+                let right = self.or_expr()?;
+                left = Expr::NullCoalesce {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                    line,
+                };
+            }
+            Ok(left)
+        })();
         self.recursion_depth -= 1;
-        Ok(left)
+        result
     }
 
     fn or_expr(&mut self) -> Result<Expr, String> {
         if self.recursion_depth >= MAX_PARSER_RECURSION_DEPTH {
-            return Err(format!("Parser recursion depth limit exceeded (max: {})", MAX_PARSER_RECURSION_DEPTH));
+            return Err(format!(
+                "Parser recursion depth limit exceeded (max: {})",
+                MAX_PARSER_RECURSION_DEPTH
+            ));
         }
         self.recursion_depth += 1;
-        let line = self.peek().line;
-        let mut left = self.and_expr()?;
-        while self.match_token(&TokenKind::Or) {
-            let right = self.and_expr()?;
-            left = Expr::Binary { left: Box::new(left), op: TokenKind::Or, right: Box::new(right), line };
-        }
+        let result = (|| {
+            let line = self.peek().line;
+            let mut left = self.and_expr()?;
+            while self.match_token(&TokenKind::Or) {
+                let right = self.and_expr()?;
+                left = Expr::Binary {
+                    left: Box::new(left),
+                    op: TokenKind::Or,
+                    right: Box::new(right),
+                    line,
+                };
+            }
+            Ok(left)
+        })();
         self.recursion_depth -= 1;
-        Ok(left)
+        result
     }
 
     fn and_expr(&mut self) -> Result<Expr, String> {
         if self.recursion_depth >= MAX_PARSER_RECURSION_DEPTH {
-            return Err(format!("Parser recursion depth limit exceeded (max: {})", MAX_PARSER_RECURSION_DEPTH));
+            return Err(format!(
+                "Parser recursion depth limit exceeded (max: {})",
+                MAX_PARSER_RECURSION_DEPTH
+            ));
         }
         self.recursion_depth += 1;
-        let line = self.peek().line;
-        let mut left = self.equality()?;
-        while self.match_token(&TokenKind::And) {
-            let right = self.equality()?;
-            left = Expr::Binary { left: Box::new(left), op: TokenKind::And, right: Box::new(right), line };
-        }
+        let result = (|| {
+            let line = self.peek().line;
+            let mut left = self.equality()?;
+            while self.match_token(&TokenKind::And) {
+                let right = self.equality()?;
+                left = Expr::Binary {
+                    left: Box::new(left),
+                    op: TokenKind::And,
+                    right: Box::new(right),
+                    line,
+                };
+            }
+            Ok(left)
+        })();
         self.recursion_depth -= 1;
-        Ok(left)
+        result
     }
 
     fn equality(&mut self) -> Result<Expr, String> {
         if self.recursion_depth >= MAX_PARSER_RECURSION_DEPTH {
-            return Err(format!("Parser recursion depth limit exceeded (max: {})", MAX_PARSER_RECURSION_DEPTH));
+            return Err(format!(
+                "Parser recursion depth limit exceeded (max: {})",
+                MAX_PARSER_RECURSION_DEPTH
+            ));
         }
         self.recursion_depth += 1;
-        let line = self.peek().line;
-        let mut left = self.comparison()?;
-        while self.match_token(&TokenKind::EqualEqual) || self.match_token(&TokenKind::NotEqual) {
-            let op = self.previous().kind.clone();
-            let right = self.comparison()?;
-            left = Expr::Binary { left: Box::new(left), op, right: Box::new(right), line };
-        }
+        let result = (|| {
+            let line = self.peek().line;
+            let mut left = self.comparison()?;
+            while self.match_token(&TokenKind::EqualEqual) || self.match_token(&TokenKind::NotEqual)
+            {
+                let op = self.previous().kind.clone();
+                let right = self.comparison()?;
+                left = Expr::Binary {
+                    left: Box::new(left),
+                    op,
+                    right: Box::new(right),
+                    line,
+                };
+            }
+            Ok(left)
+        })();
         self.recursion_depth -= 1;
-        Ok(left)
+        result
     }
 
     fn comparison(&mut self) -> Result<Expr, String> {
         if self.recursion_depth >= MAX_PARSER_RECURSION_DEPTH {
-            return Err(format!("Parser recursion depth limit exceeded (max: {})", MAX_PARSER_RECURSION_DEPTH));
+            return Err(format!(
+                "Parser recursion depth limit exceeded (max: {})",
+                MAX_PARSER_RECURSION_DEPTH
+            ));
         }
         self.recursion_depth += 1;
-        let line = self.peek().line;
-        let mut left = self.term()?;
-        while self.match_token(&TokenKind::Less) || self.match_token(&TokenKind::Greater) || self.match_token(&TokenKind::LessEqual) || self.match_token(&TokenKind::GreaterEqual) {
-            let op = self.previous().kind.clone();
-            let right = self.term()?;
-            left = Expr::Binary { left: Box::new(left), op, right: Box::new(right), line };
-        }
+        let result = (|| {
+            let line = self.peek().line;
+            let mut left = self.term()?;
+            while self.match_token(&TokenKind::Less)
+                || self.match_token(&TokenKind::Greater)
+                || self.match_token(&TokenKind::LessEqual)
+                || self.match_token(&TokenKind::GreaterEqual)
+            {
+                let op = self.previous().kind.clone();
+                let right = self.term()?;
+                left = Expr::Binary {
+                    left: Box::new(left),
+                    op,
+                    right: Box::new(right),
+                    line,
+                };
+            }
+            Ok(left)
+        })();
         self.recursion_depth -= 1;
-        Ok(left)
+        result
     }
 
     fn term(&mut self) -> Result<Expr, String> {
         if self.recursion_depth >= MAX_PARSER_RECURSION_DEPTH {
-            return Err(format!("Parser recursion depth limit exceeded (max: {})", MAX_PARSER_RECURSION_DEPTH));
+            return Err(format!(
+                "Parser recursion depth limit exceeded (max: {})",
+                MAX_PARSER_RECURSION_DEPTH
+            ));
         }
         self.recursion_depth += 1;
-        let line = self.peek().line;
-        let mut left = self.factor()?;
-        while self.match_token(&TokenKind::Plus) || self.match_token(&TokenKind::Minus) {
-            let op = self.previous().kind.clone();
-            let right = self.factor()?;
-            left = Expr::Binary { left: Box::new(left), op, right: Box::new(right), line };
-        }
+        let result = (|| {
+            let line = self.peek().line;
+            let mut left = self.factor()?;
+            while self.match_token(&TokenKind::Plus) || self.match_token(&TokenKind::Minus) {
+                let op = self.previous().kind.clone();
+                let right = self.factor()?;
+                left = Expr::Binary {
+                    left: Box::new(left),
+                    op,
+                    right: Box::new(right),
+                    line,
+                };
+            }
+            Ok(left)
+        })();
         self.recursion_depth -= 1;
-        Ok(left)
+        result
     }
 
     fn factor(&mut self) -> Result<Expr, String> {
         if self.recursion_depth >= MAX_PARSER_RECURSION_DEPTH {
-            return Err(format!("Parser recursion depth limit exceeded (max: {})", MAX_PARSER_RECURSION_DEPTH));
+            return Err(format!(
+                "Parser recursion depth limit exceeded (max: {})",
+                MAX_PARSER_RECURSION_DEPTH
+            ));
         }
         self.recursion_depth += 1;
-        let line = self.peek().line;
-        let mut left = self.unary()?;
-        while self.match_token(&TokenKind::Star) || self.match_token(&TokenKind::Slash) || self.match_token(&TokenKind::Percent) {
-            let op = self.previous().kind.clone();
-            let right = self.unary()?;
-            left = Expr::Binary { left: Box::new(left), op, right: Box::new(right), line };
-        }
-        if self.match_token(&TokenKind::DotDot) {
-            let right = self.unary()?;
-            return Ok(Expr::Range { start: Box::new(left), end: Box::new(right), line });
-        }
+        let result = (|| {
+            let line = self.peek().line;
+            let mut left = self.unary()?;
+            while self.match_token(&TokenKind::Star)
+                || self.match_token(&TokenKind::Slash)
+                || self.match_token(&TokenKind::Percent)
+            {
+                let op = self.previous().kind.clone();
+                let right = self.unary()?;
+                left = Expr::Binary {
+                    left: Box::new(left),
+                    op,
+                    right: Box::new(right),
+                    line,
+                };
+            }
+            if self.match_token(&TokenKind::DotDot) {
+                let right = self.unary()?;
+                return Ok(Expr::Range {
+                    start: Box::new(left),
+                    end: Box::new(right),
+                    line,
+                });
+            }
+            Ok(left)
+        })();
         self.recursion_depth -= 1;
-        Ok(left)
+        result
     }
 
     fn unary(&mut self) -> Result<Expr, String> {
         if self.recursion_depth >= MAX_PARSER_RECURSION_DEPTH {
-            return Err(format!("Parser recursion depth limit exceeded (max: {})", MAX_PARSER_RECURSION_DEPTH));
+            return Err(format!(
+                "Parser recursion depth limit exceeded (max: {})",
+                MAX_PARSER_RECURSION_DEPTH
+            ));
         }
         let line = self.peek().line;
         if self.match_token(&TokenKind::Minus) || self.match_token(&TokenKind::Not) {
@@ -649,7 +867,11 @@ impl Parser {
             self.recursion_depth += 1;
             let result = (|| -> Result<Expr, String> {
                 let right = self.unary()?;
-                Ok(Expr::Unary { op, expr: Box::new(right), line })
+                Ok(Expr::Unary {
+                    op,
+                    expr: Box::new(right),
+                    line,
+                })
             })();
             self.recursion_depth -= 1;
             return result;
@@ -658,7 +880,10 @@ impl Parser {
             self.recursion_depth += 1;
             let result = (|| -> Result<Expr, String> {
                 let right = self.unary()?;
-                Ok(Expr::Length { expr: Box::new(right), line })
+                Ok(Expr::Length {
+                    expr: Box::new(right),
+                    line,
+                })
             })();
             self.recursion_depth -= 1;
             return result;
@@ -668,59 +893,99 @@ impl Parser {
 
     fn call(&mut self) -> Result<Expr, String> {
         if self.recursion_depth >= MAX_PARSER_RECURSION_DEPTH {
-            return Err(format!("Parser recursion depth limit exceeded (max: {})", MAX_PARSER_RECURSION_DEPTH));
+            return Err(format!(
+                "Parser recursion depth limit exceeded (max: {})",
+                MAX_PARSER_RECURSION_DEPTH
+            ));
         }
         self.recursion_depth += 1;
-        let line = self.peek().line;
-        let mut expr = self.primary()?;
-        loop {
-            if self.match_token(&TokenKind::LParen) {
-                let arguments = self.arguments()?;
-                expr = Expr::Call { callee: Box::new(expr), arguments, line };
-            } else if self.match_token(&TokenKind::Dot) {
-                if !self.match_token(&TokenKind::Identifier) {
-                    return Err("Expected property name after '.'".to_string());
-                }
-                let name = self.intern(&self.previous().lexeme.clone());
-                if self.match_token(&TokenKind::Equal) {
-                    let value = self.expression()?;
-                    expr = Expr::SetProperty { object: Box::new(expr), name, value: Box::new(value), line };
-                } else {
-                    expr = Expr::Get { object: Box::new(expr), name, line };
-                }
-            } else if self.match_token(&TokenKind::Colon) {
-                if !self.match_token(&TokenKind::Identifier) {
-                    return Err("Expected method name after ':'".to_string());
-                }
-                let method = self.intern(&self.previous().lexeme.clone());
+        let result = (|| {
+            let line = self.peek().line;
+            let mut expr = self.primary()?;
+            loop {
                 if self.match_token(&TokenKind::LParen) {
-                    let mut arguments = self.arguments()?;
-                    arguments.insert(0, expr.clone());
-                    expr = Expr::Call { callee: Box::new(Expr::Get { object: Box::new(expr.clone()), name: method, line }), arguments, line };
+                    let arguments = self.arguments()?;
+                    expr = Expr::Call {
+                        callee: Box::new(expr),
+                        arguments,
+                        line,
+                    };
+                } else if self.match_token(&TokenKind::Dot) {
+                    if !self.match_token(&TokenKind::Identifier) {
+                        return Err("Expected property name after '.'".to_string());
+                    }
+                    let name = self.intern(&self.previous().lexeme.clone());
+                    if self.match_token(&TokenKind::Equal) {
+                        let value = self.expression()?;
+                        expr = Expr::SetProperty {
+                            object: Box::new(expr),
+                            name,
+                            value: Box::new(value),
+                            line,
+                        };
+                    } else {
+                        expr = Expr::Get {
+                            object: Box::new(expr),
+                            name,
+                            line,
+                        };
+                    }
+                } else if self.match_token(&TokenKind::Colon) {
+                    if !self.match_token(&TokenKind::Identifier) {
+                        return Err("Expected method name after ':'".to_string());
+                    }
+                    let method = self.intern(&self.previous().lexeme.clone());
+                    if self.match_token(&TokenKind::LParen) {
+                        let mut arguments = self.arguments()?;
+                        arguments.insert(0, expr.clone());
+                        expr = Expr::Call {
+                            callee: Box::new(Expr::Get {
+                                object: Box::new(expr.clone()),
+                                name: method,
+                                line,
+                            }),
+                            arguments,
+                            line,
+                        };
+                    } else {
+                        return Err("Expected '(' after method name".to_string());
+                    }
+                } else if self.match_token(&TokenKind::QuestionDot) {
+                    if !self.match_token(&TokenKind::Identifier) {
+                        return Err("Expected property name after '?.'".to_string());
+                    }
+                    let name = self.intern(&self.previous().lexeme.clone());
+                    expr = Expr::SafeGet {
+                        object: Box::new(expr),
+                        name,
+                        line,
+                    };
+                } else if self.match_token(&TokenKind::LBracket) {
+                    let index = self.expression()?;
+                    self.consume(&TokenKind::RBracket, "Expected ']' after index")?;
+                    if self.match_token(&TokenKind::Equal) {
+                        let value = self.expression()?;
+                        expr = Expr::SetIndex {
+                            object: Box::new(expr),
+                            index: Box::new(index),
+                            value: Box::new(value),
+                            line,
+                        };
+                    } else {
+                        expr = Expr::Index {
+                            object: Box::new(expr),
+                            index: Box::new(index),
+                            line,
+                        };
+                    }
                 } else {
-                    return Err("Expected '(' after method name".to_string());
+                    break;
                 }
-            } else if self.match_token(&TokenKind::QuestionDot) {
-                if !self.match_token(&TokenKind::Identifier) {
-                    return Err("Expected property name after '?.'".to_string());
-                }
-                let name = self.intern(&self.previous().lexeme.clone());
-                expr = Expr::SafeGet { object: Box::new(expr), name, line };
-            } else if self.match_token(&TokenKind::LBracket) {
-                let index = self.expression()?;
-                self.consume(&TokenKind::RBracket, "Expected ']' after index")?;
-                if self.match_token(&TokenKind::Equal) {
-                    let value = self.expression()?;
-                    expr = Expr::SetIndex { object: Box::new(expr), index: Box::new(index), value: Box::new(value), line };
-                } else {
-                    expr = Expr::Index { object: Box::new(expr), index: Box::new(index), line };
-                }
-            } else {
-                break;
             }
-        }
+            Ok(expr)
+        })();
         self.recursion_depth -= 1;
-        Ok(expr)
+        result
     }
 
     fn arguments(&mut self) -> Result<Vec<Expr>, String> {
@@ -733,11 +998,16 @@ impl Parser {
             let line = self.peek().line;
             if self.match_token(&TokenKind::DotDotDot) {
                 let expr = self.expression()?;
-                args.push(Expr::Spread { expr: Box::new(expr), line });
+                args.push(Expr::Spread {
+                    expr: Box::new(expr),
+                    line,
+                });
             } else {
                 args.push(self.expression()?);
             }
-            if !self.match_token(&TokenKind::Comma) { break; }
+            if !self.match_token(&TokenKind::Comma) {
+                break;
+            }
         }
         if !self.match_token(&TokenKind::RParen) {
             return Err("Expected ')' after arguments".to_string());
@@ -747,33 +1017,72 @@ impl Parser {
 
     fn primary(&mut self) -> Result<Expr, String> {
         if self.recursion_depth >= MAX_PARSER_RECURSION_DEPTH {
-            return Err(format!("Parser recursion depth limit exceeded (max: {})", MAX_PARSER_RECURSION_DEPTH));
+            return Err(format!(
+                "Parser recursion depth limit exceeded (max: {})",
+                MAX_PARSER_RECURSION_DEPTH
+            ));
         }
         self.recursion_depth += 1;
+        let result = self.primary_inner();
+        self.recursion_depth -= 1;
+        result
+    }
+
+    fn primary_inner(&mut self) -> Result<Expr, String> {
         let line = self.peek().line;
-        if self.match_token(&TokenKind::True) { return Ok(Expr::LiteralTrue); }
-        if self.match_token(&TokenKind::False) { return Ok(Expr::LiteralFalse); }
-        if self.match_token(&TokenKind::Nil) { return Ok(Expr::LiteralNil); }
+        if self.match_token(&TokenKind::True) {
+            return Ok(Expr::LiteralTrue);
+        }
+        if self.match_token(&TokenKind::False) {
+            return Ok(Expr::LiteralFalse);
+        }
+        if self.match_token(&TokenKind::Nil) {
+            return Ok(Expr::LiteralNil);
+        }
         if self.match_token(&TokenKind::Number) {
-            let num: f64 = self.previous().lexeme.parse().map_err(|_| "Invalid number")?;
+            let num: f64 = self
+                .previous()
+                .lexeme
+                .parse()
+                .map_err(|_| "Invalid number")?;
             return Ok(Expr::Number(num));
         }
-        if self.match_token(&TokenKind::FString) { return self.fstring_literal(line); }
+        if self.match_token(&TokenKind::FString) {
+            return self.fstring_literal(line);
+        }
         if self.match_token(&TokenKind::String) {
             let s = self.previous().lexeme.clone();
-            let raw = &s[1..s.len()-1];
+            let raw = &s[1..s.len() - 1];
             let mut result = String::new();
             let mut chars = raw.chars().peekable();
             while let Some(c) = chars.next() {
                 if c == '\\' {
                     if let Some(&next) = chars.peek() {
                         match next {
-                            'n' => { chars.next(); result.push('\n'); }
-                            't' => { chars.next(); result.push('\t'); }
-                            'r' => { chars.next(); result.push('\r'); }
-                            '"' => { chars.next(); result.push('"'); }
-                            '\'' => { chars.next(); result.push('\''); }
-                            '\\' => { chars.next(); result.push('\\'); }
+                            'n' => {
+                                chars.next();
+                                result.push('\n');
+                            }
+                            't' => {
+                                chars.next();
+                                result.push('\t');
+                            }
+                            'r' => {
+                                chars.next();
+                                result.push('\r');
+                            }
+                            '"' => {
+                                chars.next();
+                                result.push('"');
+                            }
+                            '\'' => {
+                                chars.next();
+                                result.push('\'');
+                            }
+                            '\\' => {
+                                chars.next();
+                                result.push('\\');
+                            }
                             _ => result.push(c),
                         }
                     } else {
@@ -783,7 +1092,6 @@ impl Parser {
                     result.push(c);
                 }
             }
-            self.recursion_depth -= 1;
             return Ok(Expr::String(result));
         }
         if self.match_token(&TokenKind::Await) {
@@ -791,24 +1099,33 @@ impl Parser {
                 self.advance();
             }
             let future = self.primary()?;
-            return Ok(Expr::Await { future: Box::new(future), line });
+            return Ok(Expr::Await {
+                future: Box::new(future),
+                line,
+            });
         }
-        if self.match_token(&TokenKind::Match) { return self.match_expression(line); }
+        if self.match_token(&TokenKind::Match) {
+            return self.match_expression(line);
+        }
         if self.match_token(&TokenKind::Require) {
             self.consume(&TokenKind::LParen, "Expected '(' after require")?;
             if !self.match_token(&TokenKind::String) {
                 return Err("Expected string path after require".to_string());
             }
             let path = self.previous().lexeme.clone();
-            let path = path[1..path.len()-1].to_string();
+            let path = path[1..path.len() - 1].to_string();
             self.consume(&TokenKind::RParen, "Expected ')' after require path")?;
             return Ok(Expr::Require { path, line });
         }
         if self.match_token(&TokenKind::LBrace) {
-            if self.check_lambda() { return self.lambda_literal(line); }
+            if self.check_lambda() {
+                return self.lambda_literal(line);
+            }
             return self.table_literal(line);
         }
-        if self.match_token(&TokenKind::LBracket) { return self.array_literal(line); }
+        if self.match_token(&TokenKind::LBracket) {
+            return self.array_literal(line);
+        }
         if self.check(&TokenKind::LParen) {
             if self.check_lambda() {
                 self.advance();
@@ -823,7 +1140,11 @@ impl Parser {
             let class_name = self.consume_identifier()?;
             self.consume(&TokenKind::LParen, "Expected '(' after class name in new")?;
             let arguments = self.arguments()?;
-            return Ok(Expr::NewInstance { class_name, arguments, line });
+            return Ok(Expr::NewInstance {
+                class_name,
+                arguments,
+                line,
+            });
         }
 
         if self.match_token(&TokenKind::This) {
@@ -838,19 +1159,30 @@ impl Parser {
 
         if self.match_token(&TokenKind::DotDotDot) {
             let expr = self.expression()?;
-            return Ok(Expr::Spread { expr: Box::new(expr), line });
+            return Ok(Expr::Spread {
+                expr: Box::new(expr),
+                line,
+            });
         }
         if self.match_token(&TokenKind::Identifier) {
             let param_lexeme = self.previous().lexeme.clone();
             if self.match_token(&TokenKind::FatArrow) {
                 let param_name = self.intern(&param_lexeme);
                 let body = self.expression()?;
-                return Ok(Expr::Lambda { params: vec![(param_name, None)], body: Box::new(body), line });
+                return Ok(Expr::Lambda {
+                    params: vec![(param_name, None)],
+                    body: Box::new(body),
+                    line,
+                });
             }
             let lexeme = self.previous().lexeme.clone();
             return Ok(Expr::Identifier(self.intern(&lexeme)));
         }
-        Err(format!("Unexpected token: {:?} at line {}", self.peek().kind, self.peek().line))
+        Err(format!(
+            "Unexpected token: {:?} at line {}",
+            self.peek().kind,
+            self.peek().line
+        ))
     }
 
     fn check_lambda(&mut self) -> bool {
@@ -858,16 +1190,29 @@ impl Parser {
         let mut result = false;
         if self.match_token(&TokenKind::LParen) {
             loop {
-                if self.check(&TokenKind::RParen) { break; }
+                if self.check(&TokenKind::RParen) {
+                    break;
+                }
                 if self.check(&TokenKind::Identifier) {
                     self.advance();
-                    if self.match_token(&TokenKind::Equal) {
-                        if !self.check(&TokenKind::RParen) && !self.check(&TokenKind::Comma) { self.advance(); }
+                    if self.match_token(&TokenKind::Equal)
+                        && !self.check(&TokenKind::RParen)
+                        && !self.check(&TokenKind::Comma)
+                    {
+                        self.advance();
                     }
-                } else { break; }
-                if self.check(&TokenKind::Comma) { self.advance(); } else { break; }
+                } else {
+                    break;
+                }
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
             }
-            if self.match_token(&TokenKind::RParen) { result = self.check(&TokenKind::FatArrow); }
+            if self.match_token(&TokenKind::RParen) {
+                result = self.check(&TokenKind::FatArrow);
+            }
         }
         self.current = start;
         result
@@ -880,9 +1225,13 @@ impl Parser {
                 let param_name = self.consume_identifier()?;
                 let default = if self.match_token(&TokenKind::Equal) {
                     Some(self.expression()?)
-                } else { None };
+                } else {
+                    None
+                };
                 params.push((param_name, default));
-                if !self.match_token(&TokenKind::Comma) { break; }
+                if !self.match_token(&TokenKind::Comma) {
+                    break;
+                }
             }
         }
         self.consume(&TokenKind::RParen, "Expected ')' after parameters")?;
@@ -896,10 +1245,18 @@ impl Parser {
             } else {
                 return Err("Lambda body must be an expression".to_string());
             };
-            return Ok(Expr::Lambda { params, body: Box::new(body_expr), line });
+            return Ok(Expr::Lambda {
+                params,
+                body: Box::new(body_expr),
+                line,
+            });
         }
         let body = self.expression()?;
-        Ok(Expr::Lambda { params, body: Box::new(body), line })
+        Ok(Expr::Lambda {
+            params,
+            body: Box::new(body),
+            line,
+        })
     }
 
     fn match_expression(&mut self, line: usize) -> Result<Expr, String> {
@@ -910,19 +1267,31 @@ impl Parser {
             let pattern = self.pattern()?;
             let guard = if self.match_token(&TokenKind::If) {
                 Some(self.expression()?)
-            } else { None };
+            } else {
+                None
+            };
             self.consume(&TokenKind::FatArrow, "Expected '=>' in match arm")?;
             let body = self.expression()?;
-            arms.push(MatchArm { pattern, guard, body });
+            arms.push(MatchArm {
+                pattern,
+                guard,
+                body,
+            });
             self.match_token(&TokenKind::Comma);
         }
         self.consume(&TokenKind::RBrace, "Expected '}' after match arms")?;
-        Ok(Expr::Match { value: Box::new(value), arms, line })
+        Ok(Expr::Match {
+            value: Box::new(value),
+            arms,
+            line,
+        })
     }
 
     fn pattern(&mut self) -> Result<Pattern, String> {
         let line = self.peek().line;
-        if self.match_token(&TokenKind::Underscore) { return Ok(Pattern::Wildcard); }
+        if self.match_token(&TokenKind::Underscore) {
+            return Ok(Pattern::Wildcard);
+        }
         if self.match_token(&TokenKind::LBracket) {
             return self.array_pattern();
         }
@@ -934,7 +1303,11 @@ impl Parser {
             return Ok(Pattern::Identifier(name));
         }
         if self.match_token(&TokenKind::Number) {
-            let num: f64 = self.previous().lexeme.parse().map_err(|_| "Invalid number")?;
+            let num: f64 = self
+                .previous()
+                .lexeme
+                .parse()
+                .map_err(|_| "Invalid number")?;
             return Ok(Pattern::Literal(Expr::Number(num)));
         }
         if self.match_token(&TokenKind::FString) {
@@ -943,16 +1316,23 @@ impl Parser {
         }
         if self.match_token(&TokenKind::String) {
             let s = self.previous().lexeme.clone();
-            return Ok(Pattern::Literal(Expr::String(s[1..s.len()-1].to_string())));
+            return Ok(Pattern::Literal(Expr::String(
+                s[1..s.len() - 1].to_string(),
+            )));
         }
-        Err(format!("Unexpected token in pattern: {:?}", self.peek().kind))
+        Err(format!(
+            "Unexpected token in pattern: {:?}",
+            self.peek().kind
+        ))
     }
 
     fn array_literal(&mut self, line: usize) -> Result<Expr, String> {
         let mut items = Vec::new();
         while !self.check(&TokenKind::RBracket) && !self.is_at_end() {
             items.push(self.expression()?);
-            if !self.match_token(&TokenKind::Comma) { break; }
+            if !self.match_token(&TokenKind::Comma) {
+                break;
+            }
         }
         self.consume(&TokenKind::RBracket, "Expected ']' after array items")?;
         Ok(Expr::Array { items, line })
@@ -965,13 +1345,9 @@ impl Parser {
                 return Err("Expected identifier in table".to_string());
             }
             let key = self.intern(&self.previous().lexeme.clone());
-            if self.match_token(&TokenKind::Equal) || self.match_token(&TokenKind::Colon) {
-                let value = self.expression()?;
-                entries.push((key, value));
-            } else {
-                let value = self.expression()?;
-                entries.push((key, value));
-            }
+            let _ = self.match_token(&TokenKind::Equal) || self.match_token(&TokenKind::Colon);
+            let value = self.expression()?;
+            entries.push((key, value));
             self.match_token(&TokenKind::Comma);
         }
         self.consume(&TokenKind::RBrace, "Expected '}' after table entries")?;
@@ -986,7 +1362,9 @@ impl Parser {
                 self.consume(&TokenKind::Colon, "Expected ':' in table pattern")?;
                 let pat = self.pattern()?;
                 entries.push((key, pat));
-                if !self.match_token(&TokenKind::Comma) { break; }
+                if !self.match_token(&TokenKind::Comma) {
+                    break;
+                }
             }
         }
         self.consume(&TokenKind::RBrace, "Expected '}' in table pattern")?;
@@ -998,7 +1376,9 @@ impl Parser {
         if !self.check(&TokenKind::RBracket) {
             loop {
                 patterns.push(self.pattern()?);
-                if !self.match_token(&TokenKind::Comma) { break; }
+                if !self.match_token(&TokenKind::Comma) {
+                    break;
+                }
             }
         }
         self.consume(&TokenKind::RBracket, "Expected ']' in array pattern")?;
@@ -1022,17 +1402,30 @@ impl Parser {
     }
 
     fn match_token(&mut self, kind: &TokenKind) -> bool {
-        if self.check(kind) { self.advance(); true } else { false }
+        if self.check(kind) {
+            self.advance();
+            true
+        } else {
+            false
+        }
     }
 
     fn check(&self, kind: &TokenKind) -> bool {
-        if self.is_at_end() { return false; }
+        if self.is_at_end() {
+            return false;
+        }
         self.peek().kind == *kind
     }
 
-    fn advance(&mut self) { if !self.is_at_end() { self.current += 1; } }
+    fn advance(&mut self) {
+        if !self.is_at_end() {
+            self.current += 1;
+        }
+    }
 
-    fn is_at_end(&self) -> bool { self.current >= self.tokens.len() }
+    fn is_at_end(&self) -> bool {
+        self.current >= self.tokens.len()
+    }
 
     fn peek(&self) -> &Token {
         match self.tokens.get(self.current) {
@@ -1053,7 +1446,9 @@ impl Parser {
     }
 
     fn consume(&mut self, kind: &TokenKind, message: &str) -> Result<(), String> {
-        if self.match_token(kind) { return Ok(()); }
+        if self.match_token(kind) {
+            return Ok(());
+        }
         Err(format!("{} at line {}", message, self.peek().line))
     }
 
@@ -1065,7 +1460,7 @@ impl Parser {
 impl Parser {
     fn fstring_literal(&mut self, line: usize) -> Result<Expr, String> {
         let lexeme = self.previous().lexeme.clone();
-        let content = lexeme[2..lexeme.len()-1].to_string();
+        let content = lexeme[2..lexeme.len() - 1].to_string();
         let mut parts = Vec::new();
         let mut current_str = String::new();
         let mut chars = content.chars().peekable();
@@ -1092,12 +1487,30 @@ impl Parser {
             } else if c == '\\' {
                 if let Some(&next) = chars.peek() {
                     match next {
-                        'n' => { chars.next(); current_str.push('\n'); }
-                        't' => { chars.next(); current_str.push('\t'); }
-                        'r' => { chars.next(); current_str.push('\r'); }
-                        '"' => { chars.next(); current_str.push('"'); }
-                        '\'' => { chars.next(); current_str.push('\''); }
-                        '\\' => { chars.next(); current_str.push('\\'); }
+                        'n' => {
+                            chars.next();
+                            current_str.push('\n');
+                        }
+                        't' => {
+                            chars.next();
+                            current_str.push('\t');
+                        }
+                        'r' => {
+                            chars.next();
+                            current_str.push('\r');
+                        }
+                        '"' => {
+                            chars.next();
+                            current_str.push('"');
+                        }
+                        '\'' => {
+                            chars.next();
+                            current_str.push('\'');
+                        }
+                        '\\' => {
+                            chars.next();
+                            current_str.push('\\');
+                        }
                         _ => current_str.push(c),
                     }
                 } else {
